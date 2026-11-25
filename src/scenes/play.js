@@ -12,7 +12,7 @@ import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
 import { Ore } from '../ore.js';
-import { Gromm } from '../gromm.js';
+import { Gromm, GROMM } from '../gromm.js';
 import { images, FX } from '../assets.js';
 import { makeRng } from '../rng.js';
 import { CompleteScene } from './complete.js';
@@ -278,7 +278,7 @@ export class PlayScene {
     }
     g.update(dt, this.map, p);
     const d = Math.hypot(g.x - p.x, g.y - p.y);
-    if (d < 24 + 4 && !p.dead) {
+    if (d < GROMM.catchRange && !p.dead) {
       this.caught = { t: 0 };
       g.attack(p);
       p.setDead();

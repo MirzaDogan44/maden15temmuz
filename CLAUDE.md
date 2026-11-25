@@ -101,6 +101,13 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 
 ### Temel davranış (her bölümde var)
 - **Dolaşma:** Madende rastgele dolaşır. Çok yakına gelirsen seni görür ve kovalar.
+- **Görüş:** Madenciyi sadece **görüş hattı varsa** (arada duvar yoksa) ve yaklaşık **5.5 tile** içindeyse fark eder.
+- **Kovalama ve vazgeçme:**
+  - Görüş kesilince madencinin **en son görüldüğü yere** gider; orada bulamazsa **2-3 saniye etrafına bakınır**, sonra dolaşmaya döner.
+  - Madenci yaklaşık **8 tile** uzaklaşırsa kovalamayı bırakır.
+- **Hız dengesi:** Dolaşırken madencinin yürüyüşünden yavaş (%75); kovalarken yürüyüşünden biraz hızlı (%110) ama **sprintten belirgin şekilde yavaş**. Sprint ve döngüleri doğru kullanan oyuncu kaçabilmeli, dikkatsiz oyuncu yakalanmalı.
+- **Yakalama:** Sadece sprite'lar değdiğinde değil, gerçekten yakaladığında (ayaklar arası ~14 px) öldürür.
+- Değerler `src/gromm.js` içindeki `GROMM` nesnesinde.
 - **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar.
   - Kayanın içindeyken üstte **çatlaklar ve sallanan taşlar** görünür. Dikkatli oyuncu nereden çıkacağını tahmin edebilir.
   - Girişte ve çıkışta toz bulutu, taş parçaları ve ekran sarsıntısı olsun.
@@ -125,7 +132,7 @@ Gromm çok ağır bir yaratık. Oyuncu onu görmeden önce **duymalı ve hissetm
 - **Ekran sarsıntısı:** Her adımda ekran hafifçe titrer. Sarsıntı Gromm'a olan mesafeyle artar.
 - **Toz ve taş:** Bastığı yerden toz kalkar. Yakındaysa tavandan küçük taşlar düşer, meşale ışıkları titrer.
 - **İz:** Geçtiği yerde bir süre kalıp sonra kaybolan çatlaklar ve el izleri.
-- **Hareket:** Hızlı ama hantal. Ani dönemez, dururken ve kalkarken ivmesi hissedilir. Oyuncu keskin dönüşlerle kaçabilmeli.
+- **Hareket:** Hızlı ama hantal. Ani dönemez, dururken ve kalkarken ivmesi hissedilir. Keskin dönüşlerde yavaşlar, köşelerde savrulur (yana ivmesi düşük). Oyuncu keskin dönüşlerle kaçabilmeli.
 
 ### Oyun içi ses yarıçapları (Gromm'un duyması için)
 Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < kazma < taş < koşu < şalter. Gromm duyma özelliğine sahipse yarıçapın içindeyse sese yönelir.

@@ -22,14 +22,26 @@ import { findPath } from './pathfinding.js';
 const SCALE = 2;
 const FEET = 57; // karede ayakların olduğu satır
 export const GROMM = {
-  wanderSpeed: MINER_SPEED * 0.78,
-  chaseSpeed: MINER_SPEED * 0.95,
-  accel: 210, // px/sn²: hız değişimi sınırlı (ağırlık hissi)
-  seeRange: 4.6 * TILE, // bu mesafede ve görüş hattı açıksa görür
-  feelRange: 1.8 * TILE, // bu kadar yakında görüş hattı gerekmez
-  loseTime: 3.0, // bu kadar süre göremezse aramaya geçer
-  catchRange: 24,
-  box: [12, 7, 4], // ayak kutusu
+  /** Dolaşırken: madencinin yürüyüşünden yavaş */
+  wanderSpeed: MINER_SPEED * 0.75,
+  /** Kovalarken: madencinin yürüyüşünden biraz hızlı, sprintten belirgin yavaş */
+  chaseSpeed: MINER_SPEED * 1.1,
+  /** İleri/geri ivme (px/sn²) */
+  accel: 240,
+  /** Yana ivme (px/sn²): düşük olduğu için köşelerde savrulur */
+  turnAccel: 120,
+  /** Keskin dönüşte (180°) hızın düşeceği oran */
+  turnSlowdown: 0.55,
+  /** Bu mesafede ve görüş hattı açıksa madenciyi fark eder */
+  seeRange: 5.5 * TILE,
+  /** Kovalarken madenci bu mesafeden uzaklaşırsa bırakır */
+  loseRange: 8 * TILE,
+  /** Son görülen yerde etrafına bakınma süresi (sn) */
+  lookTime: 2.5,
+  /** Ayaklar arası bu mesafeye inince yakalar (gerçekten üstüne basınca) */
+  catchRange: 14,
+  /** Ayak kutusu */
+  box: [12, 7, 4],
 };
 
 // --- Boyama ---
@@ -126,11 +138,13 @@ export class Gromm {
     this.stateTime = 0;
   }
 
-  /** Madenciyi görüyor mu? */
-  canSee(player, map) {
+  /**
+   * Madenciyi görüyor mu? Sadece görüş hattı açıksa (arada duvar yoksa) ve
+   * menzil içindeyse. Kovalarken menzil daha uzun (loseRange).
+   */
+  canSee(player, map, range = GROMM.seeRange) {
     const d = Math.hypot(player.x - this.x, player.y - this.y);
-    if (d < GROMM.feelRange) return true;
-    if (d > GROMM.seeRange) return false;
+    if (d > range) return false;
     return !map.rayBlocked(this.x, this.y - 10, player.x, player.y - 8);
   }
 
@@ -156,71 +170,108 @@ export class Gromm {
 
   update(dt, map, player) {
     this.stateTime += dt;
-    const seen = !player.dead && this.canSee(player, map);
+    const alive = !player.dead;
+    const dist = Math.hypot(player.x - this.x, player.y - this.y);
 
     switch (this.state) {
       case 'idle':
         this.path = [];
-        if (seen) this.startChase(player);
+        if (alive && this.canSee(player, map)) this.startChase(player);
         else if (this.stateTime > this.idleFor) {
           if (this.pickWanderTarget(map, player)) this.setState('wander');
           else this.stateTime = 0;
         }
         break;
       case 'wander':
-        if (seen) this.startChase(player);
+        if (alive && this.canSee(player, map)) this.startChase(player);
         else if (!this.path.length) this.rest();
         break;
-      case 'chase':
-        if (seen) {
-          this.unseen = 0;
-          this.lastSeen = { x: player.x, y: player.y };
-        } else this.unseen += dt;
-        this.repath -= dt;
-        if (this.repath <= 0) {
-          this.repath = 0.35;
-          const t = seen ? player : this.lastSeen;
-          this.goTo(map, t.x, t.y);
+      case 'chase': {
+        if (dist > GROMM.loseRange) {
+          // Yeterince uzaklaştı: bırak, etrafına bakın
+          this.lookAround();
+          break;
         }
-        if (this.unseen > GROMM.loseTime) {
+        if (alive && this.canSee(player, map, GROMM.loseRange)) {
+          this.lastSeen = { x: player.x, y: player.y };
+          this.repath -= dt;
+          if (this.repath <= 0) {
+            this.repath = 0.3;
+            this.goTo(map, player.x, player.y);
+          }
+        } else {
+          // Görüş kesildi: en son görüldüğü yere git
           this.setState('search');
           this.goTo(map, this.lastSeen.x, this.lastSeen.y);
         }
         break;
+      }
       case 'search':
-        if (seen) this.startChase(player);
-        else if (!this.path.length || this.stateTime > 8) this.rest(2.5);
+        if (alive && this.canSee(player, map)) this.startChase(player);
+        else if (!this.path.length || this.stateTime > 10) this.lookAround();
+        break;
+      case 'look':
+        // Durup etrafına bakınır: yönünü değiştirir
+        this.path = [];
+        if (alive && this.canSee(player, map)) this.startChase(player);
+        else {
+          const k = Math.floor(this.stateTime / 0.6);
+          if (k !== this.lookStep) {
+            this.lookStep = k;
+            const dirs = ['left', 'up', 'right', 'down'];
+            this.dir = dirs[(dirs.indexOf(this.dir) + 1 + (Math.random() < 0.5 ? 0 : 2)) % 4];
+          }
+          if (this.stateTime > this.lookFor) this.rest(0.3);
+        }
         break;
       case 'attack':
         this.path = [];
         break;
     }
 
-    // Hareket: hedef hıza ivmeyle yaklaş (hantal dönüşler)
-    let maxV = this.state === 'chase' ? GROMM.chaseSpeed : GROMM.wanderSpeed;
+    // Hareket: hedef hız; keskin dönüşte yavaşlar
+    const maxV = this.state === 'chase' ? GROMM.chaseSpeed : GROMM.wanderSpeed;
     let dvx = 0, dvy = 0;
     if (this.path.length) {
       const p = this.path[0];
       const dx = p.x - this.x, dy = p.y - this.y;
-      const dist = Math.hypot(dx, dy);
+      const d = Math.hypot(dx, dy);
       const last = this.path.length === 1;
-      if (dist < (last ? 6 : 14)) this.path.shift();
+      if (d < (last ? 6 : 18)) this.path.shift();
       else {
-        const sp = last && this.state !== 'chase' ? maxV * Math.min(1, dist / 30) : maxV;
-        dvx = (dx / dist) * sp;
-        dvy = (dy / dist) * sp;
+        let sp = last && this.state !== 'chase' ? maxV * Math.min(1, d / 30) : maxV;
+        const v = this.speed;
+        if (v > 20) {
+          // hareket yönü ile istenen yön arasındaki açı
+          const cos = (this.vx * dx + this.vy * dy) / (v * d);
+          const ang = Math.acos(Math.max(-1, Math.min(1, cos)));
+          sp *= 1 - GROMM.turnSlowdown * (ang / Math.PI);
+        }
+        dvx = (dx / d) * sp;
+        dvy = (dy / d) * sp;
       }
     }
-    const ax = dvx - this.vx, ay = dvy - this.vy;
-    const al = Math.hypot(ax, ay);
-    const maxA = GROMM.accel * dt;
-    if (al > maxA) {
-      this.vx += (ax / al) * maxA;
-      this.vy += (ay / al) * maxA;
+    // İvme: ileri/geri ve yana ayrı sınır (yana düşük: savrulma)
+    const v = this.speed;
+    let ax = dvx - this.vx, ay = dvy - this.vy;
+    if (v > 1) {
+      const ux = this.vx / v, uy = this.vy / v;
+      let along = ax * ux + ay * uy;
+      let side = -ax * uy + ay * ux;
+      const ma = GROMM.accel * dt, ms = GROMM.turnAccel * dt;
+      along = Math.max(-ma, Math.min(ma, along));
+      side = Math.max(-ms, Math.min(ms, side));
+      ax = along * ux - side * uy;
+      ay = along * uy + side * ux;
     } else {
-      this.vx = dvx;
-      this.vy = dvy;
+      const al = Math.hypot(ax, ay), ma = GROMM.accel * dt;
+      if (al > ma) {
+        ax = (ax / al) * ma;
+        ay = (ay / al) * ma;
+      }
     }
+    this.vx += ax;
+    this.vy += ay;
     const [rx, ry1, ry2] = GROMM.box;
     const ox = this.x, oy = this.y;
     const nx = this.x + this.vx * dt, ny = this.y + this.vy * dt;
@@ -281,6 +332,14 @@ export class Gromm {
     this.unseen = 0;
     this.lastSeen = { x: player.x, y: player.y };
     if (was !== 'chase' && this.onSpot) this.onSpot();
+  }
+
+  /** Son görülen yerde durup 2-3 sn etrafına bakın, sonra dolaşmaya dön. */
+  lookAround() {
+    this.setState('look');
+    this.lookFor = GROMM.lookTime + Math.random() * 0.8;
+    this.lookStep = -1;
+    this.path = [];
   }
 
   rest(t = 1 + Math.random() * 2.5) {
