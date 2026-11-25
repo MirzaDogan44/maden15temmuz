@@ -17,7 +17,7 @@ export const MINER_SPRITES = {
   frame: 32,
   anims: {
     idle: { fps: 6, dirs: { down: MINER + 'idle-front.png', up: MINER + 'idle-back.png', left: MINER + 'idle-left.png', right: MINER + 'idle-right.png' }, frames: 4 },
-    walk: { fps: 10, dirs: { down: MINER + 'walk-front.png', up: MINER + 'walk-back.png', left: MINER + 'walk-left.png', right: MINER + 'walk-right.png' }, frames: 4 },
+    walk: { fps: 8, dirs: { down: MINER + 'walk-front.png', up: MINER + 'walk-back.png', left: MINER + 'walk-left.png', right: MINER + 'walk-right.png' }, frames: 4 },
     death: { fps: 8, dirs: { down: MINER + 'death-front.png' }, frames: 5, loop: false },
     win: { fps: 6, dirs: { down: MINER + 'win-front.png' }, frames: 2 },
     takeOff: { fps: 6, dirs: { down: MINER + 'take-off-front.png' }, frames: 2 },
@@ -39,11 +39,37 @@ export const GROMM_SPRITES = {
   },
 };
 
+/**
+ * Zemin ve duvar dokuları (Minerman Adventure). Her dosyada 32x32 varyantlar
+ * yan yana duruyor; `x` hangi varyantın kullanılacağını söyler.
+ *   ground.png: 0 = kahverengi parke taşı, 32 = yosunlu taş, 64 = dalgalı toprak
+ *   rock.png:   0 = gri kaya, 32 = yosunlu kaya, 64 = toprakta kaya
+ */
+const TERRAIN_DIR = 'assets/madenci/minerman-adventure/terrain/';
+export const TERRAIN = {
+  floor: { src: TERRAIN_DIR + 'ground.png', x: 64 },
+  wallFace: { src: TERRAIN_DIR + 'rock.png', x: 0 },
+};
+
+/** Süs objeleri (CraftPix "Cave Objects"), gölgeli ("dark_shadow") sürümler. */
+const OBJ = 'assets/magara/cave-objects/Objects_separately/';
+export const DECOR = {
+  crystalBig: OBJ + '32/Blue-green_crystal_dark_shadow3.png',
+  crystalCluster: OBJ + '32/crystal_blue-green_vertical2.png',
+  crystalSmall: OBJ + '16/Blue-green_crystal_dark_shadow4.png',
+  crystalSmallWhite: OBJ + '16/white_crystal_dark_shadow4.png',
+  mushroomRed: OBJ + '32/mushroom1_dark_shadow3.png',
+  mushroomTeal: OBJ + '32/mushroom4_dark_shadow3.png',
+  skeleton: OBJ + '32/Human_skeleton_dark_shadow.png',
+};
+
 /** Oyunun açılışta yüklediği tüm görseller. */
 export function collectImagePaths() {
   const paths = new Set();
   for (const a of Object.values(MINER_SPRITES.anims)) for (const p of Object.values(a.dirs)) paths.add(p);
   for (const a of Object.values(GROMM_SPRITES.anims)) paths.add(a.src);
+  for (const t of Object.values(TERRAIN)) paths.add(t.src);
+  for (const p of Object.values(DECOR)) paths.add(p);
   return [...paths];
 }
 
@@ -93,8 +119,9 @@ export function drawMiner(ctx, animName, dir, t, x, y) {
   const img = images.get(src);
   if (!img) return false;
   const s = MINER_SPRITES.frame;
-  const f = frameAt(anim, t);
-  ctx.drawImage(img, f * s, 0, s, s, Math.round(x - s / 2), Math.round(y - s), s, s);
+  const f = typeof t === 'number' ? frameAt(anim, t) : t.frame;
+  // Sprite'ın ayakları karenin en altından 1 piksel yukarıda.
+  ctx.drawImage(img, f * s, 0, s, s, Math.round(x - s / 2), Math.round(y - s + 1), s, s);
   return true;
 }
 
