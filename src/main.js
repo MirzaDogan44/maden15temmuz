@@ -9,6 +9,10 @@ import { drawText } from './font.js';
 import * as audio from './audio.js';
 import { StartScene } from './scenes/start.js';
 import { PlayScene } from './scenes/play.js';
+import { IntroScene } from './scenes/intro.js';
+import { FinaleScene } from './scenes/finale.js';
+import { LEVELS } from './levels.js';
+import { shuffledOrder, abilitiesFor, newAbilityFor, START_LEVEL } from './abilities.js';
 
 class Game {
   constructor(canvas) {
@@ -40,8 +44,31 @@ class Game {
     start.ready = true;
   }
 
-  startPlay(levelIndex = 0) {
-    this.scene = new PlayScene(this, levelIndex);
+  /** Yeni oyun: Gromm'un özellik sırası karıştırılır (oyun boyunca sabit). */
+  newRun() {
+    this.run = { order: shuffledOrder() };
+  }
+
+  /** Bu bölümde Gromm'un özellikleri. */
+  abilities(levelIndex) {
+    return abilitiesFor(this.run.order, levelIndex);
+  }
+
+  /** Bölümü açılış ekranıyla başlat. */
+  startLevel(levelIndex = START_LEVEL) {
+    const i = Math.min(levelIndex, LEVELS.length - 1);
+    this.scene = new IntroScene(this, i, newAbilityFor(this.run.order, i));
+  }
+
+  /** Açılış ekranından sonra (veya ölünce, açılışsız) bölümü kur. */
+  beginLevel(levelIndex) {
+    this.scene = new PlayScene(this, Math.min(levelIndex, LEVELS.length - 1));
+  }
+
+  /** Bölüm bitti: sonraki bölümün açılışı veya final ekranı. */
+  nextLevel(levelIndex) {
+    if (levelIndex + 1 < LEVELS.length && levelIndex + 1 < 5) this.startLevel(levelIndex + 1);
+    else this.scene = new FinaleScene(this);
   }
 
   /** Ekranı sarsar. amount: piksel, time: saniye. */

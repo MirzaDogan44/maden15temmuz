@@ -299,7 +299,8 @@ export class PlayScene {
       c.screamed = true;
       audio.playScream();
     }
-    if (c.t > c.restartAt) this.game.startPlay(this.levelIndex);
+    // Ölünce sadece bu bölüm, açılış ekranı olmadan baştan başlar.
+    if (c.t > c.restartAt) this.game.beginLevel(this.levelIndex);
   }
 
   /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
@@ -524,7 +525,8 @@ export class PlayScene {
         return;
       }
     }
-    this.fadeIn = Math.min(1, this.fadeIn + dt / 1.5);
+    // bölüm yavaşça aydınlanarak başlar
+    this.fadeIn = Math.min(1, this.fadeIn + dt / 2.2);
     for (const tap of taps) {
       if (this.sprintButton.contains(tap.x, tap.y)) {
         this.sprintButton.flash = 0.12;
@@ -792,12 +794,6 @@ export class PlayScene {
   drawOverlay(ctx, w, h) {
     this.minimap.draw(ctx, 4, 4, this.player, this.t);
     this.drawCounters(ctx, w);
-    if (this.t < 5 && !this.caught) {
-      const a = Math.min(1, this.t / 1, (5 - this.t) / 1.2);
-      ctx.globalAlpha = Math.max(0, a);
-      drawText(ctx, this.level.name, Math.floor(w / 2), Math.floor(h * 0.18), { color: '#cdbb98', size: 2, align: 'center', shadow: '#000' });
-      ctx.globalAlpha = 1;
-    }
     if (this.caught) {
       const c = this.caught;
       if (c.scare && c.t < JUMPSCARE.end) {

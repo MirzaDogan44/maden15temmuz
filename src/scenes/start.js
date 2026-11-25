@@ -28,7 +28,10 @@ export class StartScene {
     this.t += dt;
     if (this.leaving > 0) {
       this.leaving += dt;
-      if (this.leaving > 1.2) this.game.startPlay();
+      if (this.leaving > 1.2) {
+        this.game.newRun();
+        this.game.startLevel();
+      }
       return;
     }
     for (const tap of taps) {

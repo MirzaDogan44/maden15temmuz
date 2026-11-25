@@ -166,9 +166,9 @@ Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < 
 | 6 (final) | *sonra belirlenecek* | *sonra belirlenecek* | *sonra belirlenecek* |
 
 ### Bölüm geçiş ekranları
-Karanlık ekran, pixel yazı tipiyle tek satır, arkada bir kükreme sesi. Altında küçük bir ipucu.
+Oyun başlayınca ve her bölümün başında: siyah ekran, ortada büyük pixel yazı (sığmazsa satırlara bölünür), üstte küçük harflerle bölüm numarası ("BÖLÜM 2"), altında küçük bir ipucu, arkada derin bir kükreme/gümbürtü. Yazı ~3 saniye kalır, dokununca geçilebilir; sonra bölüm yavaşça aydınlanarak başlar. Ölünce açılış ekranı gösterilmez, bölüm doğrudan baştan başlar (`src/scenes/intro.js`).
 
-- Bölüm 1: "Madende bir şey var... Adı **Gromm**."
+- Bölüm 1: "GROMM HAREKET EDEBİLİR" / İpucu: "Cevherleri asansöre taşı. Yakalanma."
 - Sonraki bölümler, gelen özelliğe göre:
   - Duyma: "Gromm artık seni DUYABİLİYOR." / İpucu: "Koşmak ve şalterler ses çıkarır."
   - Görme: "Gromm artık ışığı GÖREBİLİYOR." / İpucu: "Meşaleler seni ele verir."

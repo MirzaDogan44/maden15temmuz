@@ -15,7 +15,7 @@ export class CompleteScene {
     for (const tap of taps) {
       if (this.t > 1.2) {
         audio.playUiTap();
-        this.game.startPlay(this.stats.levelIndex);
+        this.game.nextLevel(this.stats.levelIndex);
         return;
       }
     }
@@ -38,7 +38,7 @@ export class CompleteScene {
     drawText(ctx, `Süre: ${mm}:${String(ss).padStart(2, '0')}`, cx, y, { color: '#cdbb98', align: 'center' });
     y += 26;
     if (this.t > 1.2 && Math.floor(this.t * 1.6) % 2 === 0) {
-      drawText(ctx, 'Tekrar oynamak için dokun', cx, y, { color: '#8f8270', align: 'center' });
+      drawText(ctx, 'Devam etmek için dokun', cx, y, { color: '#8f8270', align: 'center' });
     }
     ctx.globalAlpha = 1;
   }

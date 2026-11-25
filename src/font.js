@@ -138,3 +138,20 @@ function drawRun(ctx, s, x, y, color, size) {
     x += (g.w + 1) * size;
   }
 }
+
+/** Metni verilen genişliğe sığacak satırlara böler (kelime kelime). */
+export function wrapText(text, maxWidth, size = 1) {
+  const words = String(text).split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (textWidth(test) * size <= maxWidth || !line) line = test;
+    else {
+      lines.push(line);
+      line = w;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
