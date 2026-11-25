@@ -45,6 +45,12 @@ Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak b
 ### Hedef
 Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek asansöre güç ver, asansöre binip bölümü geç.
 
+### Harita
+- Haritalar büyük olsun (en az 60x45 tile). Labirent değil, okunabilir bir yapı: **birkaç büyük oda** ve onları bağlayan **geniş tüneller (en az 4 tile)**.
+- Ölü uç az olsun. Madencinin Gromm'un etrafından dolaşıp kaçabilmesi için **en az 2-3 büyük döngü** olsun.
+- Odalarda etrafında dönülebilen büyük **kaya adacıkları/sütunlar** olsun (Gromm'un önünü kesmek ve kaçmak için).
+- Oyuncu haritanın genel yapısını kısa sürede kavrayabilmeli: asansör salonu, karanlık bölge ve cevher odaları kolay ayırt edilsin (raylar, kristaller, uyarı tabelası gibi belirgin işaretler).
+
 ### Taşıma
 - Madenci aynı anda birden fazla cevher taşıyabilir.
 - **Taşıdıkça yavaşlar.** Az alıp hızlı gitmek ile çok alıp risk almak arasında karar verirsin.
