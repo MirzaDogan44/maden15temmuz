@@ -26,9 +26,12 @@ src/            oyun kodu
   map.js          harita, çarpışma, ışın testi
   mapRender.js    haritanın önceden çizilmesi
   pathfinding.js  A* ve yol sadeleştirme
-  player.js       madenci (yürüme, kazma, taşıma, meşale)
+  player.js       madenci (yürüme, sprint, kazma, taşıma, meşale)
   gromm.js        Gromm (boyama, davranış, ağırlık hissi)
   ore.js          cevherler
+  jumpscare.js    yakalanınca ekranı kaplayan Gromm yüzü
+  settings.js     oyuncu ayarları (jumpscare vb.)
+  ui.js           butonlar ve ayarlar paneli
   lighting.js     ortam ışığı, lambalar, karanlık bölgeler, meşale, dithering
   particles.js    toz ve kıvılcımlar
   audio.js        Web Audio ile kodla üretilen sesler
