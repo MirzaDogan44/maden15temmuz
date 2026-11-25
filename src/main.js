@@ -37,8 +37,8 @@ class Game {
     start.ready = true;
   }
 
-  startPlay() {
-    this.scene = new PlayScene(this);
+  startPlay(levelIndex = 0) {
+    this.scene = new PlayScene(this, levelIndex);
   }
 
   /** Ekranı sarsar. amount: piksel, time: saniye. */

@@ -63,6 +63,11 @@ export const DECOR = {
   skeleton: OBJ + '32/Human_skeleton_dark_shadow.png',
 };
 
+/** Efektler (Minerman Adventure). sparks.png: 2 kare, 32x32. */
+export const FX = {
+  sparks: 'assets/madenci/minerman-adventure/fxs/sparks.png',
+};
+
 /** Oyunun açılışta yüklediği tüm görseller. */
 export function collectImagePaths() {
   const paths = new Set();
@@ -70,6 +75,7 @@ export function collectImagePaths() {
   for (const a of Object.values(GROMM_SPRITES.anims)) paths.add(a.src);
   for (const t of Object.values(TERRAIN)) paths.add(t.src);
   for (const p of Object.values(DECOR)) paths.add(p);
+  for (const p of Object.values(FX)) paths.add(p);
   return [...paths];
 }
 

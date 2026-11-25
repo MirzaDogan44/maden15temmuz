@@ -16,16 +16,11 @@ const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => 
 const bayer = (x, y) => BAYER[((y & 3) << 2) | (x & 3)];
 
 // Renkler
-const STONE = { outline: [20, 16, 18], dark: [52, 46, 44], mid: [82, 75, 70], light: [112, 103, 94], hi: [142, 132, 120] };
-const PEBBLE = { outline: [28, 20, 16], dark: [66, 48, 38], mid: [96, 72, 56], light: [124, 96, 74], hi: [150, 120, 92] };
-const ORE_ROCK = { outline: [16, 14, 16], dark: [44, 40, 42], mid: [66, 61, 62], light: [92, 86, 84], hi: [118, 110, 104] };
+export const STONE = { outline: [20, 16, 18], dark: [52, 46, 44], mid: [82, 75, 70], light: [112, 103, 94], hi: [142, 132, 120] };
+export const PEBBLE = { outline: [28, 20, 16], dark: [66, 48, 38], mid: [96, 72, 56], light: [124, 96, 74], hi: [150, 120, 92] };
+export const ORE_ROCK = { outline: [16, 14, 16], dark: [44, 40, 42], mid: [66, 61, 62], light: [92, 86, 84], hi: [118, 110, 104] };
 const WOOD = { outline: '#1a0f08', dark: '#3b2414', mid: '#5c3a20', light: '#7a5230', hi: '#94683e', grain: '#2e1b0e' };
 const METAL = { outline: '#0e1013', dark: '#262a30', mid: '#3d434b', light: '#5f6772', hi: '#8f98a3' };
-const ORE_COLORS = {
-  gold: ['#8a5a14', '#d6a13a', '#ffe08a'],
-  crystal: ['#1b5a7a', '#4fc3e8', '#d4f6ff'],
-  ruby: ['#6e1222', '#d8324a', '#ff9aa8'],
-};
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -56,7 +51,7 @@ function vnoise(x, y, seed) {
  * Piksel sanatı tarzında yuvarlak bir taş. Işık sol üstten gelir.
  * Taş yığınları için önce hepsi toplanıp y'ye göre sıralanarak çizilir.
  */
-function drawStone(ctx, cx, cy, w, h, pal, rng) {
+export function drawStone(ctx, cx, cy, w, h, pal, rng) {
   const rx = w / 2, ry = h / 2;
   const x0 = Math.round(cx - rx), y0 = Math.round(cy - ry);
   const inside = (x, y) => {
@@ -531,30 +526,6 @@ export function bakeMap(map) {
     glows.push({ x: x1 - 2, y: y1 - 40, color: [0.35, 1.0, 0.45], radius: 34, intensity: 0.5, lamp: true });
   }
 
-  // ---------- 9) Cevher kayaları ----------
-  for (const ore of map.ores) {
-    const cx = ore.tx * TILE + 16, cy = ore.ty * TILE + 19;
-    // gölge
-    g.fillStyle = 'rgba(0,0,0,0.4)';
-    g.fillRect(cx - 10, cy + 6, 20, 3);
-    drawStone(g, cx, cy, 22, 17, ORE_ROCK, rng);
-    drawStone(g, cx + 6, cy - 5, 11, 9, ORE_ROCK, rng);
-    const [dk, md, hi] = ORE_COLORS[ore.kind];
-    ore.glints = [];
-    const n = rng.int(5, 7);
-    for (let k = 0; k < n; k++) {
-      const px = Math.round(cx + rng.range(-7, 7)), py = Math.round(cy + rng.range(-6, 5));
-      g.fillStyle = dk;
-      g.fillRect(px, py, 3, 2);
-      g.fillStyle = md;
-      g.fillRect(px, py, 2, 1);
-      g.fillStyle = hi;
-      g.fillRect(px, py, 1, 1);
-      ore.glints.push({ x: px, y: py, phase: rng.range(0, 10), rate: rng.range(0.6, 1.4) });
-    }
-    if (ore.kind === 'crystal') glows.push({ x: cx, y: cy, color: [0.3, 0.75, 1.0], radius: 22, intensity: 0.3 });
-  }
-
   // ---------- 10) Süs objeleri ----------
   const decorImg = (key) => images.get(DECOR[key]);
   for (const q of map.decor) {
@@ -672,4 +643,12 @@ function drawWeb(g, map, tx, ty, rng) {
       }
     }
   }
+}
+
+/** Kırılan cevherin yerine kalan taş döküntüsü (zemin katmanına çizilir). */
+export function drawRubble(g, cx, cy, rng) {
+  const list = [];
+  for (let k = 0; k < 9; k++) list.push({ x: cx + rng.range(-11, 11), y: cy + rng.range(-7, 7), w: rng.int(3, 7), h: rng.int(3, 5) });
+  list.sort((a, b) => a.y - b.y);
+  for (const s of list) drawStone(g, s.x, s.y, s.w, s.h, rng.chance(0.6) ? ORE_ROCK : PEBBLE, rng);
 }

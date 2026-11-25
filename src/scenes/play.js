@@ -7,10 +7,14 @@
 //   3) Ana canvas'a kendi ışığı olanlar eklenir: alevler, kıvılcımlar,
 //      kristal parıltıları, toz, tıklama işareti, mesajlar
 
-import { DEBUG, TILE } from '../config.js';
+import { DEBUG, TILE, NOISE } from '../config.js';
 import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
-import { bakeMap } from '../mapRender.js';
+import { bakeMap, drawRubble } from '../mapRender.js';
+import { Ore } from '../ore.js';
+import { images, FX } from '../assets.js';
+import { makeRng } from '../rng.js';
+import { CompleteScene } from './complete.js';
 import { Lighting, TORCH, LAMP, HAND_TORCH, SELF_GLOW } from '../lighting.js';
 import { Player } from '../player.js';
 import { findPath } from '../pathfinding.js';
@@ -58,10 +62,35 @@ export class PlayScene {
       const light = L.addStatic({ x, y: y + 8, ox: x, oy: st.ty * TILE + 30, radius: 110, color: TORCH.color, intensity: 0.95 });
       return { tx: st.tx, ty: st.ty, x, y, hasTorch: true, light, ...flickerState() };
     });
-    this.glows = baked.glows.map((gl) => ({
-      ...gl,
-      light: L.addStatic({ x: gl.x, y: gl.y, radius: gl.radius, color: gl.color, intensity: gl.intensity, falloff: 1.3 }),
-    }));
+    this.glows = baked.glows
+      .filter((gl) => !gl.lamp)
+      .map((gl) => ({
+        ...gl,
+        light: L.addStatic({ x: gl.x, y: gl.y, radius: gl.radius, color: gl.color, intensity: gl.intensity, falloff: 1.3 }),
+      }));
+    // Cevherler: kendi hafif ışıkları var (karanlık bölgede sönük)
+    const rng = makeRng(this.level.seed + 99);
+    this.ores = this.map.ores.map((def) => {
+      const ore = new Ore(def, rng);
+      ore.light = L.addStatic({ x: ore.x, y: ore.y - 4, radius: 56, color: ore.type.light, intensity: 0.62, falloff: 1.4 });
+      return ore;
+    });
+    // Asansör: lamba kırmızı (yük eksik) / yeşil (hazır)
+    const e = this.map.elevator;
+    this.elevator = {
+      x0: e.tx * TILE, y0: e.ty * TILE, x1: (e.tx + e.tw) * TILE, y1: (e.ty + e.th) * TILE,
+      loaded: [], required: this.level.ores, ready: false, loading: null,
+    };
+    const el = this.elevator;
+    el.lampX = el.x1 - 2;
+    el.lampY = el.y1 - 40;
+    el.redLight = L.addStatic({ x: el.lampX, y: el.lampY, radius: 40, color: [1.0, 0.2, 0.15], intensity: 0.6, falloff: 1.3 });
+    el.greenLight = L.addStatic({ x: el.lampX, y: el.lampY, radius: 70, color: [0.35, 1.0, 0.45], intensity: 0.8, falloff: 1.3 });
+    el.greenLight.flicker = 0;
+    /** Gromm'un "duyma" özelliği için son sesler: { x, y, r, t } */
+    this.noises = [];
+    this.ending = null;
+    this.stats = { time: 0 };
     this.handTorch = { x: 0, y: 0, ...HAND_TORCH, intensity: 0, ...flickerState() };
     this.selfGlow = { x: 0, y: 0, ...SELF_GLOW };
 
@@ -78,6 +107,25 @@ export class PlayScene {
         act: () => this.takeTorch(st),
       });
     }
+    for (const ore of this.ores) {
+      this.targets.push({
+        kind: 'ore',
+        obj: ore,
+        x: ore.x,
+        y: ore.y,
+        box: { x0: ore.x0 - 4, y0: ore.y0 + 2, x1: ore.x0 + 36, y1: ore.y0 + 42 },
+        reach: 36,
+        act: () => this.startDigging(ore),
+      });
+    }
+    this.targets.push({
+      kind: 'elevator',
+      x: (el.x0 + el.x1) / 2,
+      y: el.y0 + 40,
+      box: { x0: el.x0 - 4, y0: el.y0 - TILE, x1: el.x1 + 4, y1: el.y1 + 6 },
+      canAct: () => this.inElevator(),
+      act: () => this.useElevator(),
+    });
     this.pending = null;
 
     this.particles = new Particles();
@@ -135,6 +183,114 @@ export class PlayScene {
     for (let k = 0; k < 8; k++) this.particles.spawnEmber(st.x, st.y);
   }
 
+  /** Gromm'un ileride duyabileceği bir ses olayı. */
+  emitNoise(x, y, r) {
+    this.noises.push({ x, y, r, t: 0 });
+  }
+
+  // ---------------- Cevher ----------------
+
+  startDigging(ore) {
+    if (ore.broken) return;
+    const p = this.player;
+    if (p.dig) return;
+    p.startDig(ore.x, ore.y - 4, () => this.onDigHit(ore));
+  }
+
+  onDigHit(ore) {
+    const p = this.player;
+    if (ore.broken) {
+      p.stopDig();
+      return;
+    }
+    // Kazmanın taşa değdiği nokta: cevherin madenciye bakan yüzü
+    const cx = ore.x + Math.max(-9, Math.min(9, (p.x - ore.x) * 0.45));
+    const cy = ore.y - 6 + Math.max(-6, Math.min(4, (p.y - ore.y) * 0.3));
+    this.particles.spawnSpark(cx, cy);
+    const col = { gold: [255, 208, 74], crystal: [127, 216, 255], ruby: [255, 90, 110] }[ore.kind];
+    this.particles.spawnDebris(cx, cy + 6, 6, [[92, 86, 84], [66, 61, 62], col]);
+    audio.playPickHit();
+    this.emitNoise(ore.x, ore.y, NOISE.dig);
+    this.game.shake(1, 0.08);
+    if (ore.hit()) this.breakOre(ore);
+  }
+
+  breakOre(ore) {
+    const p = this.player;
+    p.stopDig();
+    this.map.setSolid(ore.tx, ore.ty, false);
+    ore.light.flicker = 0;
+    const tg = this.targets.find((t) => t.obj === ore);
+    if (tg) tg.disabled = true;
+    drawRubble(this.ground.getContext('2d'), ore.x, ore.y + 6, makeRng(ore.tx * 31 + ore.ty));
+    const col = { gold: [255, 208, 74], crystal: [127, 216, 255], ruby: [255, 90, 110] }[ore.kind];
+    this.particles.spawnDebris(ore.x, ore.y, 16, [[92, 86, 84], [118, 110, 104], col], 1.4);
+    this.particles.spawnPuff(ore.x, ore.y + 6, 8, 18);
+    this.game.shake(2, 0.15);
+    audio.playOreBreak();
+    setTimeout(() => audio.playOrePickup(ore.kind), 120);
+    p.cargo.push(ore.kind);
+    this.toast(`+1 ${ore.type.name}. Taşınan: ${p.carried}`);
+  }
+
+  // ---------------- Asansör ----------------
+
+  inElevator() {
+    const el = this.elevator, p = this.player;
+    return p.x > el.x0 + 3 && p.x < el.x1 - 3 && p.y > el.y0 + 4 && p.y < el.y1 + 2;
+  }
+
+  useElevator() {
+    const el = this.elevator, p = this.player;
+    if (this.ending || el.loading) return;
+    if (p.carried > 0) {
+      el.loading = { timer: 0.15 };
+      return;
+    }
+    if (el.ready) this.ride();
+    else this.toast(`Asansöre ${el.required} cevher yüklemelisin (${el.loaded.length}/${el.required}).`, 3);
+  }
+
+  updateElevator(dt) {
+    const el = this.elevator, p = this.player;
+    if (el.loading) {
+      if (!this.inElevator()) {
+        el.loading = null;
+      } else if ((el.loading.timer -= dt) <= 0) {
+        if (p.carried > 0) {
+          const kind = p.cargo.pop();
+          el.loaded.push(kind);
+          audio.playLoad();
+          const col = { gold: [255, 208, 74], crystal: [127, 216, 255], ruby: [255, 90, 110] }[kind];
+          this.particles.spawnDebris((el.x0 + el.x1) / 2, el.y0 + 34, 4, [col, [92, 86, 84]], 0.6);
+          el.loading.timer = 0.35;
+        } else {
+          el.loading = null;
+          if (!el.ready && el.loaded.length >= el.required) {
+            el.ready = true;
+            audio.playElevatorReady();
+            this.toast('Asansör hazır! Binmek için asansöre dokun.', 4.5);
+          } else if (!el.ready) {
+            this.toast(`Asansör: ${el.loaded.length}/${el.required}`);
+          }
+        }
+      }
+    }
+    // Lamba: kırmızı yanıp söner, hazırken sabit yeşil
+    el.redLight.flicker = el.ready ? 0 : 0.55 + 0.45 * Math.max(0, Math.sin(this.t * 3));
+    el.greenLight.flicker = el.ready ? 0.9 + Math.sin(this.t * 2) * 0.1 : 0;
+  }
+
+  ride() {
+    const el = this.elevator;
+    this.ending = { t: 0 };
+    this.player.stop();
+    this.player.x = (el.x0 + el.x1) / 2;
+    this.player.dir = 'down';
+    audio.playElevatorRide();
+    this.game.shake(1.5, 2.2);
+  }
+
   clampCamera() {
     const { width: w, height: h } = this.game.screen;
     const mw = this.map.pw, mh = this.map.ph;
@@ -143,11 +299,12 @@ export class PlayScene {
   }
 
   handleTap(tap) {
+    if (this.ending || this.player.dead) return;
     const wx = tap.x + Math.round(this.camX), wy = tap.y + Math.round(this.camY);
     // Önce dokunulabilen bir nesneye mi dokunuldu?
     const target = this.targets.find((tg) => !tg.disabled && wx >= tg.box.x0 && wx <= tg.box.x1 && wy >= tg.box.y0 && wy <= tg.box.y1);
     if (target) {
-      if (Math.hypot(this.player.x - target.x, this.player.y - target.y) <= target.reach) {
+      if (this.canAct(target)) {
         this.player.stop();
         this.pending = null;
         target.act();
@@ -167,8 +324,21 @@ export class PlayScene {
     this.marker = { x: res.target.x, y: res.target.y, t: 0, exact: res.exact };
   }
 
+  canAct(tg) {
+    if (tg.canAct) return tg.canAct();
+    return Math.hypot(this.player.x - tg.x, this.player.y - tg.y) <= tg.reach;
+  }
+
   update(dt, taps) {
     this.t += dt;
+    if (!this.ending) this.stats.time += dt;
+    if (this.ending) {
+      this.ending.t += dt;
+      if (this.ending.t > 2.4) {
+        this.game.scene = new CompleteScene(this.game, { levelIndex: this.levelIndex, loaded: this.elevator.loaded.length, time: this.stats.time });
+        return;
+      }
+    }
     this.fadeIn = Math.min(1, this.fadeIn + dt / 1.5);
     for (const tap of taps) {
       if (this.game.hud.handleTap(tap)) continue;
@@ -182,7 +352,7 @@ export class PlayScene {
     if (this.pending && !p.path.length) {
       const tg = this.pending;
       this.pending = null;
-      if (Math.hypot(p.x - tg.x, p.y - tg.y) <= tg.reach + 6) tg.act();
+      if (tg.canAct ? tg.canAct() : Math.hypot(p.x - tg.x, p.y - tg.y) <= tg.reach + 6) tg.act();
     }
 
     // Kamera: madenciyi yumuşakça takip eder.
@@ -243,6 +413,12 @@ export class PlayScene {
 
     this.particles.updateDust(dt, p, (x, y) => this.map.solidAt(x, y));
     this.particles.updateEmbers(dt);
+    this.particles.updateEffects(dt);
+    for (const ore of this.ores) ore.update(dt);
+    this.updateElevator(dt);
+    if (p.moving && Math.random() < dt * 4) this.emitNoise(p.x, p.y, NOISE.walk);
+    for (const n of this.noises) n.t += dt;
+    this.noises = this.noises.filter((n) => n.t < 1);
 
     if (this.marker) {
       this.marker.t += dt;
@@ -260,9 +436,30 @@ export class PlayScene {
       if (!st.hasTorch) continue;
       list.push({ y: st.ty * TILE + 28, draw: () => drawStandTorch(sc, st.x - camX, st.y - camY) });
     }
-    list.push({ y: this.player.y, draw: () => this.player.draw(sc, camX, camY) });
+    for (const ore of this.ores) {
+      if (!ore.broken) list.push({ y: ore.ty * TILE + 28, draw: () => ore.draw(sc, camX, camY) });
+    }
+    const el = this.elevator;
+    if (el.loaded.length) list.push({ y: el.y0 + 20, draw: () => this.drawElevatorCargo(sc, camX, camY) });
+    if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.player.draw(sc, camX, camY) });
     list.sort((a, b) => a.y - b.y);
     for (const e of list) e.draw();
+  }
+
+  /** Asansör platformundaki cevher yığını. */
+  drawElevatorCargo(sc, camX, camY) {
+    const el = this.elevator;
+    const cx = Math.round((el.x0 + el.x1) / 2 - camX), cy = Math.round(el.y0 + 18 - camY);
+    const cols = { gold: ['#8a5a14', '#ffd04a'], crystal: ['#1e5c8a', '#7fd8ff'], ruby: ['#7a1022', '#ff5a6e'] };
+    el.loaded.forEach((k, i) => {
+      const x = cx - 12 + (i % 4) * 7, y = cy - Math.floor(i / 4) * 4;
+      sc.fillStyle = '#141012';
+      sc.fillRect(x - 1, y - 1, 7, 6);
+      sc.fillStyle = cols[k][0];
+      sc.fillRect(x, y, 5, 4);
+      sc.fillStyle = cols[k][1];
+      sc.fillRect(x, y, 3, 2);
+    });
   }
 
   draw(ctx, w, h) {
@@ -347,33 +544,52 @@ export class PlayScene {
       }
     }
     ctx.globalAlpha = 1;
-    for (const ore of this.map.ores) {
-      for (const g of ore.glints || []) {
-        if (!onScreen(g.x, g.y)) continue;
-        const L = Math.min(1, light(g.x, g.y) * 1.3);
-        const v = Math.pow(Math.max(0, Math.sin(this.t * g.rate + g.phase)), 10) * L;
-        if (v < 0.1) continue;
+    for (const ore of this.ores) {
+      if (ore.broken || !onScreen(ore.x, ore.y)) continue;
+      // Kristal ve yakut karanlıkta da hafifçe parıldar; altın ışık ister.
+      const glow = ore.kind === 'gold' ? 0 : 0.35;
+      for (const g of ore.glints) {
+        const wx = ore.x0 + g.x, wy = ore.y0 + g.y;
+        const Lt = Math.min(1, Math.max(glow, light(wx, wy) * 1.3));
+        const v = Math.pow(Math.max(0, Math.sin(this.t * g.rate + g.phase)), 8) * Lt;
+        if (v < 0.08) continue;
         ctx.globalAlpha = v;
-        ctx.fillStyle = '#fff6d8';
-        ctx.fillRect(g.x - camX, g.y - camY, 1, 1);
+        ctx.fillStyle = ore.type.glint;
+        ctx.fillRect(wx - camX, wy - camY, 1, 1);
+        if (v > 0.6) {
+          ctx.globalAlpha = v * 0.5;
+          ctx.fillRect(wx - camX - 1, wy - camY, 3, 1);
+          ctx.fillRect(wx - camX, wy - camY - 1, 1, 3);
+        }
       }
     }
     ctx.globalAlpha = 1;
-    for (const gl of this.glows) {
-      if (!gl.lamp) continue;
-      const a = 0.55 + gl.light.flicker * 0.45;
-      const lx = gl.x - camX - 1, ly = gl.y - camY;
-      ctx.fillStyle = '#0c1a0e';
-      ctx.fillRect(lx - 1, ly - 1, 4, 4);
-      ctx.fillStyle = `rgba(120,255,140,${a.toFixed(2)})`;
-      ctx.fillRect(lx, ly, 2, 2);
-      ctx.fillStyle = `rgba(220,255,225,${(a * 0.8).toFixed(2)})`;
-      ctx.fillRect(lx, ly, 1, 1);
+    this.particles.drawEffects(ctx, camX, camY, light, images.get(FX.sparks));
+    // Asansör lambası
+    const el = this.elevator;
+    const lx = Math.round(el.lampX - camX) - 1, ly = Math.round(el.lampY - camY);
+    ctx.fillStyle = '#0c0a0a';
+    ctx.fillRect(lx - 1, ly - 1, 5, 5);
+    if (el.ready) {
+      ctx.fillStyle = '#7dff8c';
+      ctx.fillRect(lx, ly, 3, 3);
+      ctx.fillStyle = '#e4ffe8';
+      ctx.fillRect(lx + 1, ly + 1, 1, 1);
+    } else {
+      const a = el.redLight.flicker;
+      ctx.fillStyle = a > 0.6 ? '#ff4a3a' : '#7a1a14';
+      ctx.fillRect(lx, ly, 3, 3);
     }
   }
 
-  /** Bölüm adı ve mesajlar. */
+  /** Bölüm adı, sayaçlar ve mesajlar. */
   drawOverlay(ctx, w, h) {
+    this.drawCounters(ctx);
+    if (this.ending) {
+      const a = Math.max(0, Math.min(1, (this.ending.t - 0.8) / 1.4));
+      ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`;
+      ctx.fillRect(0, 0, w, h);
+    }
     const bt = this.t;
     if (bt < 5) {
       const a = Math.min(1, bt / 1, (5 - bt) / 1.2);
@@ -393,6 +609,25 @@ export class PlayScene {
       ctx.globalAlpha = 1;
       y -= 16;
     }
+  }
+
+  /** Sol üstte: asansördeki ve sırttaki cevher sayısı. */
+  drawCounters(ctx) {
+    const el = this.elevator, p = this.player;
+    const lines = [
+      { icon: 'cage', text: `Asansör ${el.loaded.length}/${el.required}`, color: el.ready ? '#8dff9a' : '#e6d2a8' },
+      { icon: 'sack', text: `Taşınan ${p.carried}`, color: p.carried ? '#ffd970' : '#a89a84' },
+    ];
+    const w = Math.max(...lines.map((l) => textWidth(l.text))) + 22;
+    ctx.fillStyle = 'rgba(8,6,10,0.65)';
+    ctx.fillRect(4, 4, w, 30);
+    ctx.fillStyle = 'rgba(120,100,80,0.35)';
+    ctx.fillRect(4, 4, w, 1);
+    lines.forEach((l, i) => {
+      const y = 7 + i * 13;
+      drawIcon(ctx, l.icon, 8, y + 1, el.ready && l.icon === 'cage');
+      drawText(ctx, l.text, 20, y, { color: l.color, shadow: '#000' });
+    });
   }
 
   /** Hedefte küçük bir işaret ve yol boyunca silik noktalar. */
@@ -490,5 +725,29 @@ export function drawFlame(ctx, x, y, t, phase, f, s = 1) {
   if (Math.sin(t * 13 + phase) > 0.3) {
     ctx.fillStyle = cols[1];
     ctx.fillRect(x + sway, y - hgt - 1, 1, 1);
+  }
+}
+
+/** Sayaç ikonları (9x9). */
+function drawIcon(ctx, kind, x, y, on) {
+  if (kind === 'cage') {
+    ctx.fillStyle = '#5f6772';
+    ctx.fillRect(x, y, 9, 9);
+    ctx.fillStyle = '#1a1c20';
+    ctx.fillRect(x + 1, y + 1, 7, 7);
+    ctx.fillStyle = '#5f6772';
+    ctx.fillRect(x + 3, y + 1, 1, 7);
+    ctx.fillRect(x + 5, y + 1, 1, 7);
+    ctx.fillStyle = on ? '#7dff8c' : '#ff4a3a';
+    ctx.fillRect(x + 7, y - 1, 2, 2);
+  } else {
+    ctx.fillStyle = '#1e140c';
+    ctx.fillRect(x, y + 1, 9, 8);
+    ctx.fillStyle = '#8c6c44';
+    ctx.fillRect(x + 1, y + 2, 7, 6);
+    ctx.fillStyle = '#ffd04a';
+    ctx.fillRect(x + 2, y + 1, 2, 2);
+    ctx.fillStyle = '#7fd8ff';
+    ctx.fillRect(x + 5, y + 1, 2, 2);
   }
 }

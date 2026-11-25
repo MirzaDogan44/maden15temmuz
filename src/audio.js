@@ -398,3 +398,167 @@ export function playTorchPickup() {
   src.stop(t + 0.45);
   playTorchCrackle(0.8, 0);
 }
+
+/** Kazma vuruşu: metalik "tink" + taşın tok sesi. */
+export function playPickHit() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  const f = rand(1800, 2400);
+  o.frequency.setValueAtTime(f, t);
+  o.frequency.exponentialRampToValueAtTime(f * 0.7, t + 0.08);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = f;
+  bp.Q.value = 6;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  o.connect(bp).connect(g).connect(out(1, 0, 0.35));
+  o.start(t);
+  o.stop(t + 0.14);
+  const src = noiseSource(rand(0.5, 0.8));
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 900;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(0.35, t + 0.003);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  src.connect(lp).connect(ng).connect(out(1, 0, 0.3));
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.12);
+}
+
+/** Cevher kırılması: çatırtılı bir çöküş. */
+export function playOreBreak() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  for (let k = 0; k < 6; k++) {
+    const st = t + k * rand(0.02, 0.06);
+    const src = noiseSource(rand(0.6, 1.2));
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = rand(700, 1600);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.3 * Math.pow(0.8, k), st + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + rand(0.05, 0.12));
+    src.connect(lp).connect(g).connect(out(1, rand(-0.2, 0.2), 0.4));
+    src.start(st, rand(0, 1.5));
+    src.stop(st + 0.15);
+  }
+}
+
+/** Cevheri çuvala koyma: kısa, parlak bir çınlama. */
+export function playOrePickup(kind = 'gold') {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const base = { gold: 880, crystal: 1175, ruby: 988 }[kind] || 880;
+  [1, 1.5, 2].forEach((m, i) => {
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = base * m;
+    const g = ctx.createGain();
+    const st = t + i * 0.06;
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.07, st + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + 0.35);
+    o.connect(g).connect(out(1, 0, 0.5));
+    o.start(st);
+    o.stop(st + 0.4);
+  });
+}
+
+/** Asansöre cevher yükleme: tahta/metal "tok". */
+export function playLoad() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(220, t);
+  o.frequency.exponentialRampToValueAtTime(110, t + 0.08);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.25, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  o.connect(g).connect(out(1, 0, 0.4));
+  o.start(t);
+  o.stop(t + 0.2);
+  const src = noiseSource(1.2);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2500;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(0.08, t + 0.002);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+  src.connect(hp).connect(ng).connect(master);
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.06);
+}
+
+/** Asansöre güç geldi: yükselen uğultu ve zil. */
+export function playElevatorReady() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(50, t);
+  o.frequency.exponentialRampToValueAtTime(120, t + 0.8);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 400;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.18, t + 0.3);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+  o.connect(lp).connect(g).connect(out(1, 0, 0.5));
+  o.start(t);
+  o.stop(t + 1.2);
+  for (const [f, d] of [[1320, 0.8], [1760, 0.95]]) {
+    const b = ctx.createOscillator();
+    b.type = 'sine';
+    b.frequency.value = f;
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t + d);
+    bg.gain.exponentialRampToValueAtTime(0.1, t + d + 0.005);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.8);
+    b.connect(bg).connect(out(1, 0, 0.6));
+    b.start(t + d);
+    b.stop(t + d + 0.9);
+  }
+}
+
+/** Asansörün yukarı çıkışı: zincir ve motor gürültüsü. */
+export function playElevatorRide() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(0.5);
+  src.loop = true;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 300;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.4, t + 0.4);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+  src.connect(lp).connect(g).connect(out(1, 0, 0.4));
+  src.start(t);
+  src.stop(t + 2.5);
+  for (let k = 0; k < 10; k++) {
+    const st = t + 0.2 + k * 0.2;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = rand(300, 380);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, st);
+    og.gain.exponentialRampToValueAtTime(0.03 * (1 - k / 10), st + 0.002);
+    og.gain.exponentialRampToValueAtTime(0.0001, st + 0.04);
+    o.connect(og).connect(master);
+    o.start(st);
+    o.stop(st + 0.05);
+  }
+}
