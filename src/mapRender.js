@@ -382,18 +382,92 @@ export function bakeMap(map) {
   // ---------- 7) Tavan kirişleri (madencinin üstünde kalır) ----------
   for (const b of map.beams) {
     const bx = b.tx * TILE, by = b.ty * TILE;
+    const bw = (b.tx1 - b.tx + 1) * TILE;
     // zemine düşen gölge
+    g.fillStyle = 'rgba(0,0,0,0.45)';
     for (let y = by + 15; y < by + 19; y++) {
-      for (let x = bx; x < bx + TILE; x++) {
-        if (bayer(x, y) < 0.5) {
-          g.fillStyle = 'rgba(0,0,0,0.45)';
-          g.fillRect(x, y, 1, 1);
-        }
-      }
+      for (let x = bx; x < bx + bw; x++) if (bayer(x, y) < 0.5) g.fillRect(x, y, 1, 1);
     }
-    drawWood(o, bx - 9, by + 5, TILE + 18, 8, false, rng);
+    drawWood(o, bx - 9, by + 5, bw + 18, 8, false, rng);
     drawWood(o, bx - 12, by + 2, 6, 13, true, rng);
-    drawWood(o, bx + TILE + 6, by + 2, 6, 13, true, rng);
+    drawWood(o, bx + bw + 6, by + 2, 6, 13, true, rng);
+    // ortada bir askı direği daha (geniş tünellerde)
+    if (bw > 3 * TILE) drawWood(o, bx + Math.floor(bw / 2) - 3, by + 3, 6, 11, true, rng);
+  }
+
+  // ---------- 7b) Duvar lambaları ----------
+  for (const L of map.lamps) {
+    const cx = L.tx * TILE + 16, by = L.ty * TILE;
+    if (!L.lit) {
+      // is lekesi
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      for (let k = 0; k < 22; k++) g.fillRect(cx + rng.int(-4, 4), by + rng.int(2, 10), 1, 1);
+    }
+    // duvara tutturulmuş kol
+    g.fillStyle = METAL.outline;
+    g.fillRect(cx - 1, by + 7, 3, 3);
+    g.fillRect(cx - 5, by + 9, 11, 2);
+    g.fillStyle = METAL.light;
+    g.fillRect(cx - 4, by + 9, 9, 1);
+    // fener gövdesi
+    g.fillStyle = METAL.outline;
+    g.fillRect(cx - 4, by + 11, 9, 12);
+    g.fillStyle = METAL.mid;
+    g.fillRect(cx - 3, by + 11, 7, 2);
+    g.fillRect(cx - 3, by + 20, 7, 2);
+    if (L.lit) {
+      g.fillStyle = '#e8b85a';
+      g.fillRect(cx - 3, by + 13, 7, 7);
+      g.fillStyle = '#fff0c0';
+      g.fillRect(cx - 1, by + 15, 3, 3);
+    } else {
+      g.fillStyle = '#16181c';
+      g.fillRect(cx - 3, by + 13, 7, 7);
+      g.fillStyle = '#3a3f46';
+      g.fillRect(cx - 2, by + 14, 1, 1);
+      g.fillRect(cx + 1, by + 16, 2, 1);
+      g.fillRect(cx, by + 17, 1, 2);
+    }
+    // kafes çubukları
+    g.fillStyle = METAL.outline;
+    g.fillRect(cx - 1, by + 13, 1, 7);
+    g.fillRect(cx + 1, by + 13, 1, 7);
+  }
+
+  // ---------- 7c) Uyarı tabelaları ----------
+  for (const sgn of map.signs) {
+    const cx = sgn.tx * TILE + 16, by = sgn.ty * TILE;
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    g.fillRect(cx - 6, by + 28, 12, 3);
+    drawWood(g, cx - 2, by + 12, 4, 18, true, rng);
+    drawWood(g, cx - 12, by + 3, 24, 13, false, rng);
+    // kırmızı üçgen ve ünlem
+    g.fillStyle = '#7a1a14';
+    for (let i = 0; i < 9; i++) g.fillRect(cx - Math.floor(i / 2) - 1, by + 5 + i, Math.floor(i / 2) * 2 + 3, 1);
+    g.fillStyle = '#c83a2a';
+    for (let i = 1; i < 8; i++) g.fillRect(cx - Math.floor(i / 2), by + 5 + i, Math.floor(i / 2) * 2 + 1, 1);
+    g.fillStyle = '#f2e2c0';
+    g.fillRect(cx, by + 8, 1, 3);
+    g.fillRect(cx, by + 12, 1, 1);
+  }
+
+  // ---------- 7d) Meşale standları (meşalenin kendisi oyunda çizilir) ----------
+  for (const st of map.stands) {
+    const cx = st.tx * TILE + 16, by = st.ty * TILE;
+    g.fillStyle = 'rgba(0,0,0,0.45)';
+    g.fillRect(cx - 9, by + 27, 18, 3);
+    g.fillStyle = METAL.outline;
+    for (let i = 0; i < 16; i++) {
+      g.fillRect(cx - Math.round(i * 0.5) - 1, by + 13 + i, 2, 1);
+      g.fillRect(cx + Math.round(i * 0.5), by + 13 + i, 2, 1);
+    }
+    g.fillRect(cx - 1, by + 12, 2, 17);
+    g.fillStyle = METAL.light;
+    g.fillRect(cx - 5, by + 10, 10, 1);
+    g.fillStyle = METAL.outline;
+    g.fillRect(cx - 5, by + 11, 10, 3);
+    g.fillStyle = METAL.mid;
+    g.fillRect(cx - 4, by + 11, 8, 1);
   }
 
   // ---------- 8) Asansör kafesi ----------

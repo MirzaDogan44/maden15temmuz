@@ -44,6 +44,14 @@ export class PlayScene {
       });
       return { x, y, light, phase: Math.random() * 100, flick: 1, target: 1, timer: 0, emberTimer: Math.random() };
     });
+    for (const L of this.map.lamps) {
+      if (!L.lit) continue;
+      const x = L.tx * TILE + 16;
+      this.lighting.addStatic({
+        x, y: L.ty * TILE + 20, ox: x, oy: (L.ty + 1) * TILE + 2,
+        radius: 140, color: [1.0, 0.72, 0.4], intensity: 0.9,
+      });
+    }
     this.glows = baked.glows.map((gl) => ({
       ...gl,
       light: this.lighting.addStatic({ x: gl.x, y: gl.y, radius: gl.radius, color: gl.color, intensity: gl.intensity, falloff: 1.3 }),

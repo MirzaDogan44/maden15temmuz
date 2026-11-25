@@ -3,9 +3,10 @@
 import { TILE } from './config.js';
 
 /** Işığı engelleyen ve üstünden yürünemeyen duvar karakterleri. */
-const WALL_CHARS = new Set(['#', 'T', 'H']);
+const WALL_CHARS = new Set(['#', 'T', 'H', 'L', 'l']);
 /** Yürünemeyen ama ışığı engellemeyen engeller. */
-const OBSTACLE_CHARS = new Set(['k', 'o', 'c']);
+const OBSTACLE_CHARS = new Set(['k', 'c', '1', '2', '3', 'P', 'W']);
+const ORE_KINDS = { 1: 'gold', 2: 'crystal', 3: 'ruby' };
 
 export class TileMap {
   constructor(level) {
@@ -23,12 +24,17 @@ export class TileMap {
     this.solid = new Uint8Array(this.w * this.h);
 
     this.start = { x: TILE * 1.5, y: TILE * 1.5 };
+    this.grommStart = null;
     this.torches = [];
+    this.lamps = [];
     this.supports = [];
     this.beams = [];
     this.rails = [];
     this.ores = [];
+    this.stands = [];
+    this.signs = [];
     this.decor = [];
+    this.darkZones = level.darkZones || [];
     let ex0 = Infinity, ey0 = Infinity, ex1 = -1, ey1 = -1;
 
     for (let y = 0; y < this.h; y++) {
@@ -40,12 +46,21 @@ export class TileMap {
         if (OBSTACLE_CHARS.has(c)) this.solid[i] = 1;
         switch (c) {
           case 'S': this.start = { x: (x + 0.5) * TILE, y: (y + 0.6) * TILE }; break;
+          case 'M': this.grommStart = { x: (x + 0.5) * TILE, y: (y + 0.6) * TILE }; break;
           case 'E': ex0 = Math.min(ex0, x); ey0 = Math.min(ey0, y); ex1 = Math.max(ex1, x); ey1 = Math.max(ey1, y); break;
           case 'T': this.torches.push({ tx: x, ty: y }); break;
+          case 'L': this.lamps.push({ tx: x, ty: y, lit: true }); break;
+          case 'l': this.lamps.push({ tx: x, ty: y, lit: false }); break;
           case 'H': this.supports.push({ tx: x, ty: y }); break;
-          case '=': this.beams.push({ tx: x, ty: y }); break;
+          case '=':
+            // Yan yana '=' karakterleri tek bir kiriş
+            if (rows[y][x - 1] === '=') this.beams[this.beams.length - 1].tx1 = x;
+            else this.beams.push({ tx: x, tx1: x, ty: y });
+            break;
           case 'r': this.rails.push({ tx: x, ty: y }); break;
-          case 'o': this.ores.push({ tx: x, ty: y, kind: ['gold', 'crystal', 'ruby'][this.ores.length % 3] }); break;
+          case '1': case '2': case '3': this.ores.push({ tx: x, ty: y, kind: ORE_KINDS[c] }); break;
+          case 'P': this.stands.push({ tx: x, ty: y }); break;
+          case 'W': this.signs.push({ tx: x, ty: y }); break;
           case 'k': case 'c': case 'g': case 'm': case 'b': case 'w': case 'x':
             this.decor.push({ type: c, tx: x, ty: y });
             break;
@@ -54,9 +69,20 @@ export class TileMap {
     }
     this.elevator = ex1 >= 0 ? { tx: ex0, ty: ey0, tw: ex1 - ex0 + 1, th: ey1 - ey0 + 1 } : null;
 
-    for (const t of [...this.torches, ...this.supports]) {
-      if (!this.isFace(t.tx, t.ty)) console.warn('Meşale/kiriş zemine bakan bir duvar yüzünde değil:', t);
+    for (const t of [...this.torches, ...this.supports, ...this.lamps]) {
+      if (!this.isFace(t.tx, t.ty)) console.warn('Meşale/lamba/kiriş zemine bakan bir duvar yüzünde değil:', t);
     }
+  }
+
+  /** Bir kareyi yürünebilir/yürünemez yapar (ör. kırılan cevher). */
+  setSolid(tx, ty, solid) {
+    if (this.inBounds(tx, ty)) this.solid[ty * this.w + tx] = solid ? 1 : 0;
+  }
+
+  /** Piksel noktası bir karanlık bölgenin içinde mi? */
+  inDarkZone(px, py) {
+    const tx = px / TILE, ty = py / TILE;
+    return this.darkZones.some((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
   }
 
   inBounds(tx, ty) {
