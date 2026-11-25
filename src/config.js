@@ -21,9 +21,11 @@ export const MIN_BUTTON_CSS = 48;
 /** Madencinin yürüme hızı (piksel/saniye). Ekranı yaklaşık 3-4 saniyede geçer. */
 export const MINER_SPEED = 115;
 
-/** Taşınan her cevher hızı bu oranda düşürür... */
-export const CARRY_SLOWDOWN = 0.1;
-/** ...ama hız bu oranın altına inmez. */
+/** Madenci aynı anda en fazla bu kadar cevher taşıyabilir. */
+export const MAX_CARRY = 1;
+/** Cevher taşırken hız bu oranda düşer (%15). */
+export const CARRY_SLOWDOWN = 0.15;
+/** Hız bu oranın altına inmez. */
 export const MIN_CARRY_SPEED = 0.55;
 
 /** Sprint: yürüme hızının bu katı. */

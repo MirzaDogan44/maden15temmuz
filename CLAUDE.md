@@ -52,8 +52,10 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Oyuncu haritanın genel yapısını kısa sürede kavrayabilmeli: asansör salonu, karanlık bölge ve cevher odaları kolay ayırt edilsin (raylar, kristaller, uyarı tabelası gibi belirgin işaretler).
 
 ### Taşıma
-- Madenci aynı anda birden fazla cevher taşıyabilir.
-- **Taşıdıkça yavaşlar.** Az alıp hızlı gitmek ile çok alıp risk almak arasında karar verirsin.
+- Madenci aynı anda **sadece 1 cevher** taşıyabilir. Taşıdığı cevher sırtında görünür.
+- Elinde cevher varken başka bir cevhere dokunursa kazmaz; ekranda kısa bir uyarı çıkar: "Önce bunu asansöre götür."
+- Cevher taşırken **hafifçe yavaşlar (~%15)**. Her cevher için asansöre gidip gelmek gerekir; bu yolculuklar Gromm'la karşılaşma riskini oluşturur.
+- Değerler `src/config.js` içinde (MAX_CARRY, CARRY_SLOWDOWN).
 
 ### Şalterler
 - Asansör elektriksizdir. Bölümdeki **tüm şalterler** indirilince çalışır.

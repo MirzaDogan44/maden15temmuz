@@ -7,7 +7,7 @@
 //   3) Ana canvas'a kendi ışığı olanlar eklenir: alevler, kıvılcımlar,
 //      kristal parıltıları, toz, tıklama işareti, mesajlar
 
-import { DEBUG, TILE, NOISE } from '../config.js';
+import { DEBUG, TILE, NOISE, MAX_CARRY } from '../config.js';
 import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
@@ -358,10 +358,19 @@ export class PlayScene {
 
   // ---------------- Cevher ----------------
 
+  /** Elinde zaten cevher varsa yenisini kazamaz. */
+  carryFull() {
+    if (this.player.carried < MAX_CARRY) return false;
+    this.toast('Önce bunu asansöre götür.', 2.2);
+    audio.playUiTap();
+    return true;
+  }
+
   startDigging(ore) {
     if (ore.broken) return;
     const p = this.player;
     if (p.dig) return;
+    if (this.carryFull()) return;
     p.startDig(ore.x, ore.y - 4, () => this.onDigHit(ore));
   }
 
@@ -398,7 +407,7 @@ export class PlayScene {
     audio.playOreBreak();
     setTimeout(() => audio.playOrePickup(ore.kind), 120);
     p.cargo.push(ore.kind);
-    this.toast(`+1 ${ore.type.name}. Taşınan: ${p.carried}`);
+    this.toast(`+1 ${ore.type.name}. Asansöre götür!`);
   }
 
   // ---------------- Asansör ----------------
@@ -472,6 +481,8 @@ export class PlayScene {
     // Önce dokunulabilen bir nesneye mi dokunuldu?
     const target = this.targets.find((tg) => !tg.disabled && wx >= tg.box.x0 && wx <= tg.box.x1 && wy >= tg.box.y0 && wy <= tg.box.y1);
     if (target) {
+      // Elinde cevher varken başka cevhere gitme bile, hemen uyar.
+      if (target.kind === 'ore' && this.carryFull()) return;
       if (this.canAct(target)) {
         this.player.stop();
         this.pending = null;
@@ -877,7 +888,7 @@ export class PlayScene {
     const el = this.elevator, p = this.player;
     const lines = [
       { icon: 'cage', text: `Asansör ${el.loaded.length}/${el.required}`, color: el.ready ? '#8dff9a' : '#e6d2a8' },
-      { icon: 'sack', text: `Taşınan ${p.carried}`, color: p.carried ? '#ffd970' : '#a89a84' },
+      { icon: 'sack', text: `Taşınan ${p.carried}/${MAX_CARRY}`, color: p.carried ? '#ffd970' : '#a89a84' },
     ];
     const w = Math.max(...lines.map((l) => textWidth(l.text))) + 22;
     ctx.fillStyle = 'rgba(8,6,10,0.65)';

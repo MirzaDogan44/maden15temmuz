@@ -290,22 +290,46 @@ export class Player {
     }
   }
 
-  /** Sırttaki cevher çuvalı. */
+  /** Sırtta taşınan cevher parçası (tek cevher): kaya ve renkli damar/kristal. */
   drawSack(ctx, camX, camY) {
-    const off = { down: [0, -21], up: [0, -16], left: [8, -17], right: [-8, -17] }[this.dir];
-    const x = Math.round(this.x - camX + off[0]), y = Math.round(this.y - camY + off[1]);
-    const n = this.cargo.length;
-    const w = 7 + Math.min(4, n), h = 6 + Math.min(4, n);
-    ctx.fillStyle = '#1e140c';
-    ctx.fillRect(x - Math.ceil(w / 2) - 1, y - h, w + 2, h + 1);
-    ctx.fillStyle = '#6e5232';
-    ctx.fillRect(x - Math.ceil(w / 2), y - h + 1, w, h - 1);
-    ctx.fillStyle = '#8c6c44';
-    ctx.fillRect(x - Math.ceil(w / 2), y - h + 1, w, 1);
-    const cols = { gold: '#ffd04a', crystal: '#7fd8ff', ruby: '#ff5a6e' };
-    for (let i = 0; i < Math.min(4, n); i++) {
-      ctx.fillStyle = cols[this.cargo[i]];
-      ctx.fillRect(x - Math.ceil(w / 2) + 1 + i * 2, y - h, 2, 2);
+    const kind = this.cargo[0];
+    if (!kind) return;
+    const off = { down: [7, -21], up: [0, -15], left: [8, -16], right: [-8, -16] }[this.dir];
+    const bob = this.moving && this.frame % 2 ? 1 : 0;
+    const x = Math.round(this.x - camX + off[0]) - 5, y = Math.round(this.y - camY + off[1]) - 8 + bob;
+    // taşıma kayışı
+    ctx.fillStyle = '#3a2614';
+    ctx.fillRect(x + 4, y + 7, 2, 3);
+    // kaya
+    ctx.fillStyle = '#141012';
+    ctx.fillRect(x, y + 2, 11, 7);
+    ctx.fillRect(x + 1, y + 1, 9, 9);
+    ctx.fillStyle = '#4a4446';
+    ctx.fillRect(x + 1, y + 2, 9, 6);
+    ctx.fillStyle = '#6a6264';
+    ctx.fillRect(x + 2, y + 2, 5, 2);
+    const pal = {
+      gold: ['#8a5a14', '#ffd04a', '#fff2a0'],
+      crystal: ['#1e5c8a', '#4fb8e8', '#d4f6ff'],
+      ruby: ['#7a1022', '#e0384e', '#ffb0bc'],
+    }[kind];
+    if (kind === 'gold') {
+      for (const [px, py] of [[2, 4], [6, 3], [5, 6], [8, 5]]) {
+        ctx.fillStyle = pal[0];
+        ctx.fillRect(x + px, y + py, 2, 2);
+        ctx.fillStyle = pal[1];
+        ctx.fillRect(x + px, y + py, 1, 1);
+      }
+    } else {
+      // kayadan çıkan iki sivri kristal
+      for (const [px, h] of [[3, 5], [6, 7]]) {
+        ctx.fillStyle = pal[0];
+        ctx.fillRect(x + px - 1, y + 3 - h, 3, h);
+        ctx.fillStyle = pal[1];
+        ctx.fillRect(x + px, y + 3 - h, 1, h);
+        ctx.fillStyle = pal[2];
+        ctx.fillRect(x + px, y + 3 - h, 1, 1);
+      }
     }
   }
 
