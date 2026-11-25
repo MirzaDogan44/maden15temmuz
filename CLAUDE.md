@@ -144,6 +144,15 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 - 5 özellikten 4'ü 2–5. bölümlerde gelir. Kalan 1 özellik final bölümünde kullanılabilir.
 - Ayrıca Gromm her bölümde **biraz** hızlanır, ama madencinin **koşu hızını asla geçmesin.**
 
+Uygulama ayrıntıları (`src/gromm.js`, `src/abilities.js`):
+- Sıra oyun başında karıştırılır ve oyun boyunca sabittir; ölüp bölümü tekrar oynamak sırayı değiştirmez.
+- **Duyma:** Ses olaylarının yarıçapı içindeyse sesin geldiği yere gider (yürüme 70 < kazma 170 < taş 230 < koşu 280 < şalter 560 px).
+- **Görme:** Elinde meşale olan madenciyi ~13 tile'dan, lamba ışığında duranı ~9 tile'dan görür (görüş hattı yine gerekir).
+- **Koklama:** Madencinin geçtiği yerde görünmez bir iz kalır (~40 sn). Gromm ~6 tile içindeki izin en taze noktasına gider, oradan daha tazesine geçerek madenciyi bulur.
+- **Hafıza:** Kaybettiği madencinin en son görüldüğü yere bakar, sonra asansörün çevresini kontrol eder; dolaşırken de ~30 sn'de bir asansöre uğrar.
+- **Hız:** %25 hızlanır. Her bölümde ayrıca %3.5 hızlanır. Kovalama hızı hiçbir durumda sprintin %90'ını geçmez.
+- Test için: `?abilities=duyma,gorme` (her bölümde bu özellikler), `?level=3` (3. bölümden başla).
+
 ### Ağırlık hissi ("güm güm")
 Gromm çok ağır bir yaratık. Oyuncu onu görmeden önce **duymalı ve hissetmeli.**
 - **Ses:** Her el yere değdiğinde derin bir "GÜM". Uzaktayken boğuk ve kısık, yaklaştıkça sert ve yüksek (bkz. Ses bölümü).

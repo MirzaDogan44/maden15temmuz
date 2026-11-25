@@ -15,7 +15,7 @@
 // Hareket hantal: hız vektörü ivmeyle değişir, ani dönemez. Madenci keskin
 // dönüşlerle kaçabilir.
 
-import { TILE, MINER_SPEED } from './config.js';
+import { TILE, MINER_SPEED, SPRINT_MULT } from './config.js';
 import { images, GROMM_SPRITES } from './assets.js';
 import { findPath } from './pathfinding.js';
 
@@ -42,6 +42,26 @@ export const GROMM = {
   catchRange: 14,
   /** Ayak kutusu */
   box: [12, 7, 4],
+
+  // --- Özellikler ---
+  /** Her bölümde biraz hızlanır (bölüm başına) */
+  levelSpeedup: 0.035,
+  /** Hız özelliği: hız çarpanı */
+  speedAbility: 1.25,
+  /** Hiçbir durumda geçemeyeceği hız: madencinin sprint hızının %90'ı */
+  maxSpeed: MINER_SPEED * SPRINT_MULT * 0.9,
+  /** Görme: elinde meşale olan madenciyi bu uzaklıktan görür */
+  torchSight: 13 * TILE,
+  /** Görme: lamba ışığında duran madenciyi bu uzaklıktan görür */
+  lightSight: 9 * TILE,
+  /** Görme: madencinin bulunduğu yerdeki ışık bu değerin üstündeyse 'ışıkta' sayılır */
+  litThreshold: 0.55,
+  /** Koklama: bu mesafedeki izi alır */
+  smellRange: 6 * TILE,
+  /** Koklama: bu kadar eski iz artık kokmaz (sn) */
+  trailLife: 40,
+  /** Hafıza: dolaşırken asansörü kontrol etme aralığı (sn) */
+  patrolEvery: 30,
 };
 
 // --- Boyama ---
@@ -126,7 +146,107 @@ export class Gromm {
     this.onStomp = null;
     /** Madenciyi ilk fark ettiğinde */
     this.onSpot = null;
+    /** Bir sesi duyup oraya yöneldiğinde */
+    this.onHear = null;
+    // Özellikler (bkz. setAbilities)
+    this.abilities = new Set();
+    this.levelIndex = 0;
+    /** Oyun sahnesinin her karede doldurduğu algı bilgisi */
+    this.senses = { noises: [], playerLight: 0, trail: [], elevator: null, time: 0 };
+    this.smellTimer = 0;
+    this.trackT = -1;
+    this.checkedElevator = false;
+    this.patrolTimer = GROMM.patrolEvery;
     sheets();
+  }
+
+  /** Bu bölümdeki özellikler: 'duyma' | 'gorme' | 'koklama' | 'hafiza' | 'hiz' */
+  setAbilities(list, levelIndex = 0) {
+    this.abilities = new Set(list);
+    this.levelIndex = levelIndex;
+  }
+
+  has(a) {
+    return this.abilities.has(a);
+  }
+
+  /** Kovalama hızı: bölüme ve 'hız' özelliğine göre, ama sprintten hep yavaş. */
+  get chaseSpeed() {
+    let v = GROMM.chaseSpeed * (1 + GROMM.levelSpeedup * this.levelIndex);
+    if (this.has('hiz')) v *= GROMM.speedAbility;
+    return Math.min(v, GROMM.maxSpeed);
+  }
+
+  get wanderSpeed() {
+    let v = GROMM.wanderSpeed * (1 + GROMM.levelSpeedup * this.levelIndex);
+    if (this.has('hiz')) v *= GROMM.speedAbility;
+    return Math.min(v, this.chaseSpeed * 0.85);
+  }
+
+  /** Görüş menzili. Görme özelliğiyle ışık taşıyan/ışıkta duran madenci uzaktan görülür. */
+  sightRange(player, chasing) {
+    let r = chasing ? GROMM.loseRange : GROMM.seeRange;
+    if (this.has('gorme')) {
+      if (player.hasTorch) r = Math.max(r, GROMM.torchSight);
+      else if (this.senses.playerLight > GROMM.litThreshold) r = Math.max(r, GROMM.lightSight);
+    }
+    return r;
+  }
+
+  /** Duyma: yarıçapının içinde kaldığı en güçlü yeni sese yönel. */
+  hear(map) {
+    if (!this.has('duyma')) return false;
+    let best = null, bestScore = 0;
+    for (const n of this.senses.noises) {
+      const d = Math.hypot(n.x - this.x, n.y - this.y);
+      if (d > n.r) continue;
+      const score = n.r - d;
+      if (score > bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    if (!best) return false;
+    this.setState('search');
+    this.lastSeen = { x: best.x, y: best.y };
+    this.goTo(map, best.x, best.y);
+    if (this.onHear) this.onHear(best);
+    return true;
+  }
+
+  /** Koklama: yakındaki izin daha taze bir noktasını bul. */
+  freshTrailPoint() {
+    const now = this.senses.time;
+    let best = null;
+    for (const pt of this.senses.trail) {
+      if (pt.t <= this.trackT || now - pt.t > GROMM.trailLife) continue;
+      if (Math.hypot(pt.x - this.x, pt.y - this.y) > GROMM.smellRange) continue;
+      if (!best || pt.t > best.t) best = pt;
+    }
+    return best;
+  }
+
+  smell(map, dt) {
+    if (!this.has('koklama')) return false;
+    this.smellTimer -= dt;
+    if (this.smellTimer > 0) return false;
+    this.smellTimer = 0.5;
+    const pt = this.freshTrailPoint();
+    if (!pt) return false;
+    this.setState('track');
+    this.trackT = pt.t;
+    this.goTo(map, pt.x, pt.y);
+    return true;
+  }
+
+  /** Hafıza: asansörün çevresini kontrol etmeye git. */
+  patrol(map) {
+    const e = this.senses.elevator;
+    if (!this.has('hafiza') || !e) return false;
+    this.setState('patrol');
+    this.patrolTimer = GROMM.patrolEvery;
+    this.checkedElevator = true;
+    return this.goTo(map, e.x, e.y);
   }
 
   get speed() {
@@ -142,7 +262,7 @@ export class Gromm {
    * Madenciyi görüyor mu? Sadece görüş hattı açıksa (arada duvar yoksa) ve
    * menzil içindeyse. Kovalarken menzil daha uzun (loseRange).
    */
-  canSee(player, map, range = GROMM.seeRange) {
+  canSee(player, map, range = this.sightRange(player, false)) {
     const d = Math.hypot(player.x - this.x, player.y - this.y);
     if (d > range) return false;
     return !map.rayBlocked(this.x, this.y - 10, player.x, player.y - 8);
@@ -173,26 +293,36 @@ export class Gromm {
     const alive = !player.dead;
     const dist = Math.hypot(player.x - this.x, player.y - this.y);
 
+    // Sakin durumlar: önce gör, sonra duy, sonra kokla
+    const calm = this.state !== 'chase' && this.state !== 'attack';
+    if (calm && alive) {
+      if (this.canSee(player, map)) this.startChase(player);
+      else if (this.hear(map)) { /* sese yöneldi */ }
+      else if ((this.state === 'idle' || this.state === 'wander' || this.state === 'look') && this.smell(map, dt)) { /* ize düştü */ }
+    }
+
     switch (this.state) {
       case 'idle':
         this.path = [];
-        if (alive && this.canSee(player, map)) this.startChase(player);
-        else if (this.stateTime > this.idleFor) {
+        this.patrolTimer -= dt;
+        if (this.stateTime > this.idleFor) {
+          if (this.patrolTimer <= 0 && this.patrol(map)) break;
           if (this.pickWanderTarget(map, player)) this.setState('wander');
           else this.stateTime = 0;
         }
         break;
       case 'wander':
-        if (alive && this.canSee(player, map)) this.startChase(player);
-        else if (!this.path.length) this.rest();
+        this.patrolTimer -= dt;
+        if (!this.path.length) this.rest();
+        else if (this.patrolTimer <= 0) this.patrol(map);
         break;
       case 'chase': {
-        if (dist > GROMM.loseRange) {
+        if (dist > this.sightRange(player, true)) {
           // Yeterince uzaklaştı: bırak, etrafına bakın
           this.lookAround();
           break;
         }
-        if (alive && this.canSee(player, map, GROMM.loseRange)) {
+        if (alive && this.canSee(player, map, this.sightRange(player, true))) {
           this.lastSeen = { x: player.x, y: player.y };
           this.repath -= dt;
           if (this.repath <= 0) {
@@ -207,21 +337,38 @@ export class Gromm {
         break;
       }
       case 'search':
-        if (alive && this.canSee(player, map)) this.startChase(player);
-        else if (!this.path.length || this.stateTime > 10) this.lookAround();
+        if (!this.path.length || this.stateTime > 10) this.lookAround();
+        break;
+      case 'track': {
+        // Koklama: izin daha taze noktasına geç
+        if (!this.path.length || this.stateTime > 6) {
+          const pt = this.freshTrailPoint();
+          if (pt) {
+            this.trackT = pt.t;
+            this.goTo(map, pt.x, pt.y);
+            this.stateTime = 0;
+          } else this.lookAround();
+        }
+        break;
+      }
+      case 'patrol':
+        if (!this.path.length || this.stateTime > 15) this.lookAround();
         break;
       case 'look':
         // Durup etrafına bakınır: yönünü değiştirir
         this.path = [];
-        if (alive && this.canSee(player, map)) this.startChase(player);
-        else {
+        {
           const k = Math.floor(this.stateTime / 0.6);
           if (k !== this.lookStep) {
             this.lookStep = k;
             const dirs = ['left', 'up', 'right', 'down'];
             this.dir = dirs[(dirs.indexOf(this.dir) + 1 + (Math.random() < 0.5 ? 0 : 2)) % 4];
           }
-          if (this.stateTime > this.lookFor) this.rest(0.3);
+          if (this.stateTime > this.lookFor) {
+            // Hafıza: son gördüğü yerden sonra asansörün çevresine bakar
+            if (!this.checkedElevator && this.patrol(map)) break;
+            this.rest(0.3);
+          }
         }
         break;
       case 'attack':
@@ -230,7 +377,8 @@ export class Gromm {
     }
 
     // Hareket: hedef hız; keskin dönüşte yavaşlar
-    const maxV = this.state === 'chase' ? GROMM.chaseSpeed : GROMM.wanderSpeed;
+    const st = this.state;
+    const maxV = st === 'chase' ? this.chaseSpeed : st === 'search' || st === 'track' || st === 'patrol' ? (this.chaseSpeed + this.wanderSpeed) / 2 : this.wanderSpeed;
     let dvx = 0, dvy = 0;
     if (this.path.length) {
       const p = this.path[0];
@@ -327,6 +475,7 @@ export class Gromm {
 
   startChase(player) {
     const was = this.state;
+    this.checkedElevator = false;
     this.setState('chase');
     this.repath = 0;
     this.unseen = 0;

@@ -325,6 +325,7 @@ export class Lighting {
 
   /** Dünya noktasındaki ışık parlaklığı (0..~1.5). compute()'tan sonra çağrılmalı. */
   sample(wx, wy) {
+    if (!this.R || this.c0x === undefined) return 0; // henüz hiç hesaplanmadı
     const i = Math.floor(wx / CELL) - this.c0x;
     const j = Math.floor(wy / CELL) - this.c0y;
     if (i < 0 || j < 0 || i >= this.cw || j >= this.ch) return 0;

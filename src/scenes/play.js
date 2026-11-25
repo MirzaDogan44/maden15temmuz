@@ -152,6 +152,18 @@ export class PlayScene {
     const gs = this.map.grommStart || { x: this.map.pw / 2, y: this.map.ph / 2 };
     this.gromm = new Gromm(gs.x, gs.y);
     this.gromm.onStomp = (x, y, side) => this.grommStomp(x, y, side);
+    // Bu bölümde Gromm'un özellikleri (oyun başında karıştırılan sıradan)
+    this.abilities = game.abilities(levelIndex);
+    this.gromm.setAbilities(this.abilities, levelIndex);
+    this.gromm.onHear = (n) => {
+      const p = this.player;
+      audio.playGrowl(Math.hypot(this.gromm.x - p.x, this.gromm.y - p.y) + 200, panOf(this.gromm.x - p.x));
+    };
+    /** Koklama için madencinin görünmez izi: { x, y, t } */
+    this.trail = [];
+    this.trailTimer = 0;
+    /** Gromm'a bu karede iletilecek yeni sesler */
+    this.newNoises = [];
     this.gromm.onSpot = () => {
       const p = this.player;
       audio.playGrowl(Math.hypot(this.gromm.x - p.x, this.gromm.y - p.y), panOf(this.gromm.x - p.x));
@@ -265,7 +277,9 @@ export class PlayScene {
 
   /** Gromm'un ileride duyabileceği bir ses olayı. */
   emitNoise(x, y, r) {
-    this.noises.push({ x, y, r, t: 0 });
+    const n = { x, y, r, t: 0 };
+    this.noises.push(n);
+    this.newNoises.push(n);
   }
 
   // ---------------- Gromm ----------------
@@ -335,7 +349,26 @@ export class PlayScene {
   updateGromm(dt) {
     const g = this.gromm, p = this.player;
     if (this.ending) return;
+    // Koku izi: madencinin geçtiği yerlerde birkaç saniyede bir nokta
+    this.trailTimer -= dt;
+    if (this.trailTimer <= 0 && !p.dead) {
+      this.trailTimer = 0.35;
+      const last = this.trail[this.trail.length - 1];
+      if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 10) this.trail.push({ x: p.x, y: p.y, t: this.t });
+      else last.t = this.t;
+      while (this.trail.length && this.t - this.trail[0].t > 45) this.trail.shift();
+    }
+    // Algı bilgisi
+    const el = this.elevator;
+    g.senses = {
+      noises: this.newNoises,
+      playerLight: NO_LIGHT ? 0 : this.lighting.sample(p.x, p.y - 8),
+      trail: this.trail,
+      elevator: { x: (el.x0 + el.x1) / 2, y: el.y1 + 48 },
+      time: this.t,
+    };
     g.update(dt, this.map, p);
+    this.newNoises = [];
     const d = Math.hypot(g.x - p.x, g.y - p.y);
     if (d < GROMM.catchRange && !p.dead) {
       this.onCaught();
@@ -794,7 +827,8 @@ export class PlayScene {
       ctx.fillRect(0, 0, w, h);
     }
     if (DEBUG) {
-      drawText(ctx, `${Math.round(this.player.x)},${Math.round(this.player.y)}`, 4, h - 26, { color: '#7f7', shadow: '#000' });
+      const g = this.gromm;
+      drawText(ctx, `${Math.round(this.player.x)},${Math.round(this.player.y)}  GROMM: ${g.state} [${this.abilities.join(',') || '-'}] ${Math.round(g.chaseSpeed)}`, 4, h - 26, { color: '#7f7', shadow: '#000' });
     }
   }
 
