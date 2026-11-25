@@ -31,6 +31,7 @@
 | Asansöre yükle | Asansöre tıkla. Taşınan cevherler yüklenir. |
 | Şalter indir | Şaltere tıkla. |
 | Yemek ye | Erzak sandığına tıkla. |
+| Meşale al | Karanlık bölge girişindeki meşale standına tıkla. |
 | Taş topla | Yerdeki taşa tıkla (en fazla 3). |
 | Taş at | Sağdaki **taş butonuna** bas, sonra hedef noktaya tıkla. |
 | Koş | Sağdaki **sprint butonu**. Mouse ile hem butonu basılı tutup hem başka yere tıklamak mümkün olmadığı için **aç/kapa** şeklinde çalışsın. |
@@ -62,6 +63,14 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Atılan taş düştüğü yerde ses çıkarır ve Gromm'u oraya çeker (duyma özelliği varsa).
 - Gromm'da **hafıza** özelliği varsa aynı numaraya iki kere kanmaz.
 
+### Karanlık bölgeler ve meşale
+- Madenin çoğu duvar lambaları ve meşalelerle **loş ama görülebilir**. Oyuncu yolları, cevherleri ve çevreyi görebilir.
+- Haritada belirli **karanlık bölgeler** var (en derin tüneller, değerli cevherlerin olduğu odalar). Buralar zifiri karanlıktır.
+- Karanlık bölgelerin girişi belli olur: söndürülmüş lambalar, uyarı tabelası ve karanlığa doğru kararan bir geçiş.
+- Girişte bir **meşale standı** vardır. Standa tıklayan madenci meşaleyi eline alır. Elinde meşale varken etrafında titreyen, sıcak bir ışık dairesi olur; karanlık bölgede ancak o kadarını görür.
+- Meşalesiz karanlık bölgeye giren madenci neredeyse hiçbir şey göremez.
+- Meşalenin ışığı Gromm'un **görme** özelliğiyle bağlantılıdır (ışık taşıyan madenci uzaktan fark edilir).
+
 ### Açlık ve soğuk
 - **Açlık barı** zamanla düşer. Erzak sandıklarından yemek yiyerek doldurulur.
 - **Sıcaklık barı** zamanla düşer. Duvardaki **meşalelerin** yanında durunca dolar.
@@ -89,7 +98,7 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 | Özellik | Etkisi |
 |---|---|
 | Duyma | Kazma, koşu, şalter ve taş seslerinin geldiği yere gider. |
-| Görme | Fenerin ve meşalelerin ışığını uzaktan fark eder. |
+| Görme | Meşalelerin ve lambaların ışığını uzaktan fark eder; elinde meşale olan madenciyi uzaktan görür. |
 | Koklama | Madencinin bıraktığı izi takip eder. Yemek yiyince iz güçlenir. |
 | Hafıza | Seni en son gördüğü yeri ve asansör yolunu kontrol eder. Taş numarasına iki kere kanmaz. |
 | Hız | Belirgin şekilde hızlanır. |
@@ -155,8 +164,12 @@ Karanlık ekran, pixel yazı tipiyle tek satır, arkada bir kükreme sesi. Altı
 ## Görsel tarz
 
 - **Pixel art, üstten bakış.** Karanlık ve ürkütücü bir atmosfer.
-- **Işık:** Ekranın çoğu karanlık. Madencinin fenerinin baktığı yöne doğru bir ışık konisi ve etrafında küçük bir aydınlık alan var. Duvarlarda titreyen meşaleler. Işık kenarlarında **dithering** (piksel desenli geçiş) kullan, yumuşak gradyan değil.
-- **Kendi ışığı olanlar:** Gromm'un gözleri, meşale alevleri ve kristal parıltıları karanlıkta da görünür.
+- **Işık:** Madenin tamamı karanlık **değil**.
+  - **Normal bölgeler:** Duvar lambaları ve meşalelerle loş ama rahat görülebilir. Lambaların çevresinde sıcak turuncu ışık havuzları, aralarda soğuk tonlu gölgeler, köşeler ve dar yerler daha karanlık.
+  - **Karanlık bölgeler:** Haritada sınırları belli, zifiri karanlık özel alanlar. Orada tek ışık madencinin elindeki meşaledir (bkz. Oynanış > Karanlık bölgeler ve meşale).
+  - Madencinin fener konisi yok; asıl ışık kaynakları ortam lambaları ve meşaledir. Madencinin etrafında sadece çok küçük bir hale var.
+  - Duvarlar ışığı keser. Işık kenarlarında **dithering** (piksel desenli geçiş) kullan, yumuşak gradyan değil. Işıklı yerler sıcak sarı-turuncu, karanlık yerler soğuk koyu mavi-mor.
+- **Kendi ışığı olanlar:** Gromm'un gözleri, meşale alevleri, lamba camları ve kristal parıltıları karanlıkta da görünür.
 - **Renkler:** Kahverengi/gri taşlar, sarı altın, mavi kristal, kırmızı yakut cevherler. Gromm koyu mor/gri, sırtında dikenler.
 - **Efektler:** Şalter ve Gromm'un yere çıkışında ekran sarsıntısı, kazarken toz ve taş parçacıkları.
 - **Boyut tutarlılığı:** Bütün karakterler ve tile'lar aynı ölçeğe uymalı (hedef: 32x32 tile, Gromm 64x64 veya daha büyük).
@@ -197,5 +210,5 @@ Kurallar:
 
 ## Açık konular (sonra karar verilecek)
 - Final bölümünün tasarımı.
-- Fenerin kapatılabilmesi (karanlıkta gizlice ilerleme) eklensin mi?
+- Meşalenin bir süre sonra sönmesi (yakıt) ya da yere bırakılabilmesi eklensin mi?
 - Cevher türleri farklı olsun mu (ağır/değerli/gürültülü)?

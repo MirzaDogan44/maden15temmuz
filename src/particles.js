@@ -1,8 +1,6 @@
 // Atmosfer parçacıkları: fener ışığında süzülen toz ve meşale kıvılcımları.
 // Hepsi dünya koordinatında tutulur, ışık hesabından sonra çizilir.
 
-import { LANTERN } from './lighting.js';
-
 const MAX_DUST = 90;
 const MAX_EMBERS = 80;
 
@@ -13,15 +11,18 @@ export class Particles {
     this.dustTimer = 0;
   }
 
-  /** Fener konisinin içinde yeni toz zerrecikleri doğurur. */
-  updateDust(dt, lantern, solidAt) {
+  /**
+   * Madencinin çevresinde havada süzülen toz zerrecikleri doğurur.
+   * Sadece ışık alan yerlerde görünürler (bkz. drawDust).
+   */
+  updateDust(dt, center, solidAt) {
     this.dustTimer += dt;
     while (this.dustTimer > 1 / 30) {
       this.dustTimer -= 1 / 30;
       if (this.dust.length >= MAX_DUST) break;
-      const a = lantern.angle + (Math.random() * 2 - 1) * LANTERN.halfAngle * 1.1;
-      const r = 12 + Math.random() * LANTERN.range * 0.8;
-      const x = lantern.x + Math.cos(a) * r, y = lantern.y + Math.sin(a) * r - 8;
+      const a = Math.random() * Math.PI * 2;
+      const r = 8 + Math.random() * 150;
+      const x = center.x + Math.cos(a) * r, y = center.y + Math.sin(a) * r * 0.8 - 10;
       if (solidAt(x, y)) continue;
       this.dust.push({
         x, y,

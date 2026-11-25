@@ -378,3 +378,23 @@ export function playRockfall() {
   o.start(t);
   o.stop(t + 0.4);
 }
+
+/** Meşaleyi standdan alma: kısa bir alev "vuuş"u. */
+export function playTorchPickup() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(0.8);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 0.8;
+  bp.frequency.setValueAtTime(300, t);
+  bp.frequency.exponentialRampToValueAtTime(1800, t + 0.25);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.25, t + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+  src.connect(bp).connect(g).connect(out(1, 0, 0.3));
+  src.start(t, rand(0, 1));
+  src.stop(t + 0.45);
+  playTorchCrackle(0.8, 0);
+}

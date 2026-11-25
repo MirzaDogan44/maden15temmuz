@@ -27,6 +27,32 @@ export class Player {
     this.stuckTime = 0;
     /** Ayağın yere bastığı karede çağrılır. */
     this.onStep = null;
+    /** Elinde meşale var mı? (Işığı ileride Gromm'un "görme"sini etkileyecek.) */
+    this.hasTorch = false;
+  }
+
+  /** Elde tutulan meşalenin alev noktası (dünya koordinatı). */
+  torchTip() {
+    const bob = this.moving && this.frame % 2 ? 1 : 0;
+    switch (this.dir) {
+      case 'left': return { x: this.x - 9, y: this.y - 19 + bob };
+      case 'right': return { x: this.x + 9, y: this.y - 19 + bob };
+      case 'up': return { x: this.x - 8, y: this.y - 20 + bob };
+      default: return { x: this.x + 8, y: this.y - 19 + bob };
+    }
+  }
+
+  /** Meşale sapı (sprite'tan önce/sonra çizilir). */
+  drawTorchStick(ctx, camX, camY) {
+    const tip = this.torchTip();
+    const x = Math.round(tip.x - camX), y = Math.round(tip.y - camY);
+    const lean = this.dir === 'left' ? 1 : this.dir === 'right' ? -1 : 0;
+    ctx.fillStyle = '#1a0f08';
+    for (let i = 0; i < 9; i++) ctx.fillRect(x + Math.round((lean * i) / 4) - 1, y + 1 + i, 3, 1);
+    ctx.fillStyle = '#7a5230';
+    for (let i = 0; i < 8; i++) ctx.fillRect(x + Math.round((lean * i) / 4), y + 1 + i, 1, 1);
+    ctx.fillStyle = '#2a1408';
+    ctx.fillRect(x - 1, y, 3, 2);
   }
 
   setPath(points) {
@@ -118,9 +144,12 @@ export class Player {
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(Math.round(x - 5), Math.round(y - 1), 10, 2);
     ctx.fillRect(Math.round(x - 4), Math.round(y - 2), 8, 4);
+    // Yukarı bakarken meşale vücudun arkasında kalır.
+    if (this.hasTorch && this.dir === 'up') this.drawTorchStick(ctx, camX, camY);
     const ok = this.moving
       ? drawMiner(ctx, 'walk', this.dir, { frame: this.frame }, x, y)
       : drawMiner(ctx, 'idle', this.dir, this.idleTime, x, y);
+    if (this.hasTorch && this.dir !== 'up') this.drawTorchStick(ctx, camX, camY);
     if (!ok) {
       ctx.fillStyle = '#c98a3a';
       ctx.fillRect(Math.round(x - 6), Math.round(y - 20), 12, 20);
