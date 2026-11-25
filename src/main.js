@@ -1,0 +1,116 @@
+// Giriş noktası: ekran, giriş, oyun döngüsü ve sahneler.
+
+import { STEP, MAX_FRAME_TIME, DEBUG } from './config.js';
+import { Screen } from './screen.js';
+import { Input } from './input.js';
+import { Hud } from './ui.js';
+import { collectImagePaths, loadImages } from './assets.js';
+import { drawText } from './font.js';
+import { StartScene } from './scenes/start.js';
+import { PlayScene } from './scenes/play.js';
+
+class Game {
+  constructor(canvas) {
+    this.screen = new Screen(canvas);
+    this.input = new Input(this.screen);
+    this.hud = new Hud(this.screen);
+    this.screen.onResize = () => this.hud.layout();
+
+    this.shakeAmount = 0;
+    this.shakeTime = 0;
+    this.shakeX = 0;
+    this.shakeY = 0;
+
+    this.fps = 0;
+    this._fpsFrames = 0;
+    this._fpsTime = 0;
+
+    this.scene = new StartScene(this);
+    this.input.onPointerDown = (e) => {
+      if (this.scene.onPointerDown) this.scene.onPointerDown(e);
+    };
+  }
+
+  async load() {
+    const start = this.scene;
+    await loadImages(collectImagePaths(), (d, t) => start.setProgress(d, t));
+    start.ready = true;
+  }
+
+  startPlay() {
+    this.scene = new PlayScene(this);
+  }
+
+  /** Ekranı sarsar. amount: piksel, time: saniye. */
+  shake(amount, time) {
+    this.shakeAmount = Math.max(this.shakeAmount, amount);
+    this.shakeTime = Math.max(this.shakeTime, time);
+  }
+
+  update(dt) {
+    const taps = this.input.consumeTaps();
+    this.scene.update(dt, taps);
+    this.hud.update(dt);
+
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+      const a = this.shakeAmount * Math.min(1, this.shakeTime * 4);
+      this.shakeX = Math.round((Math.random() * 2 - 1) * a);
+      this.shakeY = Math.round((Math.random() * 2 - 1) * a);
+      if (this.shakeTime <= 0) {
+        this.shakeAmount = 0;
+        this.shakeX = this.shakeY = 0;
+      }
+    }
+  }
+
+  render() {
+    const { ctx, width: w, height: h } = this.screen;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.setTransform(1, 0, 0, 1, this.shakeX, this.shakeY);
+    this.scene.draw(ctx, w, h);
+
+    // Arayüz sarsılmaz.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.hud.draw(ctx);
+
+    if (DEBUG) {
+      const s = this.screen;
+      drawText(ctx, `${this.fps} FPS  ${s.width}X${s.height}  X${s.scale}`, 4, h - 14, { color: '#7f7', shadow: '#000' });
+    }
+  }
+
+  run() {
+    let last = performance.now();
+    let acc = 0;
+    const frame = (now) => {
+      const dt = Math.min(MAX_FRAME_TIME, (now - last) / 1000);
+      last = now;
+      acc += dt;
+      while (acc >= STEP) {
+        this.update(STEP);
+        acc -= STEP;
+      }
+      this.render();
+
+      this._fpsFrames++;
+      this._fpsTime += dt;
+      if (this._fpsTime >= 0.5) {
+        this.fps = Math.round(this._fpsFrames / this._fpsTime);
+        this._fpsFrames = 0;
+        this._fpsTime = 0;
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+}
+
+const game = new Game(document.getElementById('game'));
+game.run();
+game.load();
+
+if (DEBUG) window.game = game;
