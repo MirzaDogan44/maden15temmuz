@@ -14,13 +14,23 @@ ES modülleri `file://` ile açılmaz, küçük bir sunucu gerekir:
 python3 -m http.server 8000
 ```
 
-Sonra http://localhost:8000 adresini aç. Adresin sonuna `?debug` eklersen FPS ve ölçek bilgisi görünür.
+Sonra http://localhost:8000 adresini aç. Adresin sonuna `?debug` eklersen FPS ve ölçek bilgisi görünür, `?nolight` ışığı kapatır (haritayı incelemek için).
 
 ## Klasörler
 
 ```
 index.html
-src/            oyun kodu (main.js, screen.js, input.js, assets.js, audio.js, ui.js, font.js, scenes/)
+src/            oyun kodu
+  main.js         oyun döngüsü, sahneler
+  levels.js       bölüm haritaları (ASCII)
+  map.js          harita, çarpışma, ışın testi
+  mapRender.js    haritanın önceden çizilmesi
+  pathfinding.js  A* ve yol sadeleştirme
+  player.js       madenci
+  lighting.js     karanlık, fener, meşaleler, dithering
+  particles.js    toz ve kıvılcımlar
+  audio.js        Web Audio ile kodla üretilen sesler
+  scenes/         başlangıç ve oyun sahnesi
 assets/
   madenci/      Minerman Adventure (tumas81)
   gromm/        Top-Down Boss Enemy (10KStudios)
