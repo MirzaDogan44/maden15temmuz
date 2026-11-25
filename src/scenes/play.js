@@ -130,6 +130,18 @@ export class PlayScene {
     el.redLight = L.addStatic({ x: el.lampX, y: el.lampY, radius: 40, color: [1.0, 0.2, 0.15], intensity: 0.6, falloff: 1.3 });
     el.greenLight = L.addStatic({ x: el.lampX, y: el.lampY, radius: 70, color: [0.35, 1.0, 0.45], intensity: 0.8, falloff: 1.3 });
     el.greenLight.flicker = 0;
+    // Şalterler: hepsi indirilince asansöre güç gelir
+    this.switches = this.map.switches.map((sw) => {
+      const x = sw.tx * TILE + 16, y = sw.ty * TILE;
+      const lx = x + 4, ly = y + 9;
+      return {
+        tx: sw.tx, ty: sw.ty, x, y, down: false, anim: 0, lx, ly,
+        red: L.addStatic({ x: lx, y: (sw.ty + 1) * TILE - 4, ox: x, oy: (sw.ty + 1) * TILE + 2, radius: 30, color: [1, 0.2, 0.15], intensity: 0.5, falloff: 1.3, applyDark: false }),
+        green: L.addStatic({ x: lx, y: (sw.ty + 1) * TILE - 4, ox: x, oy: (sw.ty + 1) * TILE + 2, radius: 40, color: [0.35, 1, 0.45], intensity: 0.6, falloff: 1.3, applyDark: false }),
+      };
+    });
+    for (const sw of this.switches) sw.green.flicker = 0;
+    el.switchesTotal = this.switches.length;
     /** Gromm'un "duyma" özelliği için son sesler: { x, y, r, t } */
     this.noises = [];
     this.ending = null;
@@ -172,6 +184,17 @@ export class PlayScene {
         box: { x0: ore.x0 - 4, y0: ore.y0 + 2, x1: ore.x0 + 36, y1: ore.y0 + 42 },
         reach: 36,
         act: () => this.startDigging(ore),
+      });
+    }
+    for (const sw of this.switches) {
+      this.targets.push({
+        kind: 'switch',
+        obj: sw,
+        x: sw.x,
+        y: (sw.ty + 1) * TILE + 9,
+        box: { x0: sw.tx * TILE - 4, y0: sw.ty * TILE - 2, x1: (sw.tx + 1) * TILE + 4, y1: (sw.ty + 1) * TILE + 10 },
+        reach: 30,
+        act: () => this.pullSwitch(sw),
       });
     }
     this.targets.push({
@@ -413,6 +436,71 @@ export class PlayScene {
     this.toast(`+1 ${ore.type.name}. Asansöre götür!`);
   }
 
+  // ---------------- Şalterler ----------------
+
+  get switchesDown() {
+    return this.switches.filter((s) => s.down).length;
+  }
+
+  pullSwitch(sw) {
+    const p = this.player;
+    if (sw.down) {
+      this.toast('Bu şalter zaten indirildi.', 1.8);
+      return;
+    }
+    p.stop();
+    p.dir = 'up';
+    sw.down = true;
+    sw.anim = 0.001;
+    audio.playLeverPull();
+    // kol dibe vurunca: KLANK!
+    setTimeout(() => {
+      audio.playKlank();
+      this.game.shake(3.5, 0.35);
+      this.particles.spawnSpark(sw.x, sw.y + 18);
+      this.particles.spawnSpark(sw.x + 5, sw.y + 12);
+      for (let k = 0; k < 10; k++) this.particles.spawnEmber(sw.x + (Math.random() - 0.5) * 10, sw.y + 16);
+      this.particles.spawnDebris(sw.x, sw.y + 30, 5, [[92, 86, 84], [160, 150, 140]], 0.5);
+      sw.red.flicker = 0;
+      sw.green.flicker = 1;
+    }, 160);
+    // çok büyük ses: Gromm (duyma özelliği varsa) uzaktan duyar
+    this.emitNoise(sw.x, sw.y + 32, NOISE.lever);
+    const n = this.switchesDown, total = this.switches.length;
+    if (n >= total) this.toast('Tüm şalterler indirildi. Asansöre elektrik geldi!', 3.5);
+    else this.toast(`Şalter indirildi (${n}/${total})`, 2.5);
+    this.checkElevatorReady();
+  }
+
+  /** Asansör: yük tamam ve bütün şalterler inmişse çalışır. */
+  checkElevatorReady() {
+    const el = this.elevator;
+    if (el.ready || el.loaded.length < el.required || this.switchesDown < this.switches.length) return;
+    el.ready = true;
+    audio.playElevatorReady();
+    this.toast('Asansör hazır! Binmek için asansöre dokun.', 4.5);
+  }
+
+  /** Asansörün yanındaki şalter göstergeleri (kendi ışıklı). */
+  drawSwitchIndicators(ctx, camX, camY) {
+    const el = this.elevator, n = this.switches.length;
+    if (!n) return;
+    // asansörün sağ direğinin yanında, lambanın altında küçük bir pano
+    const x0 = Math.round(el.x1 + 3 - camX), y0 = Math.round(el.lampY + 6 - camY);
+    ctx.fillStyle = '#0e1013';
+    ctx.fillRect(x0 - 2, y0 - 2, n * 6 + 3, 8);
+    ctx.fillRect(x0 + Math.floor(n * 3) - 1, y0 + 6, 2, 10); // ayak
+    ctx.fillStyle = '#3d434b';
+    ctx.fillRect(x0 - 1, y0 - 1, n * 6 + 1, 1);
+    this.switches.forEach((sw, i) => {
+      const x = x0 + i * 6;
+      ctx.fillStyle = sw.down ? '#7dff8c' : Math.sin(this.t * 4 + i) > 0 ? '#ff4a3a' : '#8a1a14';
+      ctx.fillRect(x, y0, 4, 4);
+      ctx.fillStyle = sw.down ? '#e4ffe8' : 'rgba(255,200,190,0.6)';
+      ctx.fillRect(x + 1, y0 + 1, 1, 1);
+    });
+  }
+
   // ---------------- Asansör ----------------
 
   inElevator() {
@@ -428,7 +516,8 @@ export class PlayScene {
       return;
     }
     if (el.ready) this.ride();
-    else this.toast(`Asansöre ${el.required} cevher yüklemelisin (${el.loaded.length}/${el.required}).`, 3);
+    else if (el.loaded.length < el.required) this.toast(`Asansöre ${el.required} cevher yüklemelisin (${el.loaded.length}/${el.required}).`, 3);
+    else this.toast(`Asansörde elektrik yok: şalterleri indir (${this.switchesDown}/${this.switches.length}).`, 3);
   }
 
   updateElevator(dt) {
@@ -446,12 +535,10 @@ export class PlayScene {
           el.loading.timer = 0.35;
         } else {
           el.loading = null;
-          if (!el.ready && el.loaded.length >= el.required) {
-            el.ready = true;
-            audio.playElevatorReady();
-            this.toast('Asansör hazır! Binmek için asansöre dokun.', 4.5);
-          } else if (!el.ready) {
-            this.toast(`Asansör: ${el.loaded.length}/${el.required}`);
+          this.checkElevatorReady();
+          if (!el.ready) {
+            if (el.loaded.length < el.required) this.toast(`Asansör: ${el.loaded.length}/${el.required}`);
+            else this.toast(`Yük tamam. Asansörde elektrik yok: şalterleri indir (${this.switchesDown}/${this.switches.length}).`, 3.5);
           }
         }
       }
@@ -607,6 +694,7 @@ export class PlayScene {
     this.particles.updateEmbers(dt);
     this.particles.updateEffects(dt);
     for (const ore of this.ores) ore.update(dt);
+    for (const sw of this.switches) if (sw.anim > 0 && sw.anim < 1) sw.anim = Math.min(1, sw.anim + dt / 0.16);
     this.updateElevator(dt);
     // Sprint butonu ve dayanıklılık barının görünürlüğü
     const sb = this.sprintButton;
@@ -638,6 +726,7 @@ export class PlayScene {
     for (const ore of this.ores) {
       if (!ore.broken) list.push({ y: ore.ty * TILE + 28, draw: () => ore.draw(sc, camX, camY) });
     }
+    for (const sw of this.switches) list.push({ y: (sw.ty + 1) * TILE - 1, draw: () => drawSwitch(sc, sw, camX, camY) });
     const el = this.elevator;
     if (el.loaded.length) list.push({ y: el.y0 + 20, draw: () => this.drawElevatorCargo(sc, camX, camY) });
     if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.player.draw(sc, camX, camY) });
@@ -773,6 +862,15 @@ export class PlayScene {
     ctx.globalAlpha = 1;
     this.particles.drawEffects(ctx, camX, camY, light, images.get(FX.sparks));
     this.gromm.drawEyes(ctx, camX, camY, this.t);
+    for (const sw of this.switches) {
+      if (!onScreen(sw.x, sw.y)) continue;
+      const x = Math.round(sw.lx - camX), y = Math.round(sw.ly - camY);
+      ctx.fillStyle = sw.down ? '#7dff8c' : Math.sin(this.t * 3) > -0.3 ? '#ff4a3a' : '#9a1e16';
+      ctx.fillRect(x - 1, y - 1, 3, 3);
+      ctx.fillStyle = sw.down ? '#e4ffe8' : '#ffc0b0';
+      ctx.fillRect(x, y - 1, 1, 1);
+    }
+    this.drawSwitchIndicators(ctx, camX, camY);
     // Asansör lambası
     const el = this.elevator;
     const lx = Math.round(el.lampX - camX) - 1, ly = Math.round(el.lampY - camY);
@@ -892,6 +990,10 @@ export class PlayScene {
       { icon: 'cage', text: `${el.loaded.length}/${el.required}`, color: el.loaded.length >= el.required ? '#8dff9a' : '#e6d2a8', on: el.ready },
       { icon: 'sack', text: `${p.carried}/${MAX_CARRY}`, color: p.carried ? '#ffd970' : '#a89a84' },
     ];
+    if (this.switches.length) {
+      const n = this.switchesDown;
+      items.push({ icon: 'lever', text: `${n}/${this.switches.length}`, color: n >= this.switches.length ? '#8dff9a' : '#ff9a8a', on: n >= this.switches.length });
+    }
     const widths = items.map((it) => 12 + textWidth(it.text));
     const total = widths.reduce((a, b) => a + b, 0) + (items.length - 1) * 8 + 10;
     let x = Math.floor(w / 2 - total / 2);
@@ -1006,8 +1108,55 @@ export function drawFlame(ctx, x, y, t, phase, f, s = 1) {
   }
 }
 
+/** Duvardaki şalter kutusu ve kolu (ışıktan önce çizilir). */
+function drawSwitch(ctx, sw, camX, camY) {
+  const cx = Math.round(sw.x - camX), by = Math.round(sw.y - camY);
+  // kutu
+  ctx.fillStyle = '#0e1013';
+  ctx.fillRect(cx - 7, by + 6, 14, 19);
+  ctx.fillStyle = '#4a515a';
+  ctx.fillRect(cx - 6, by + 7, 12, 17);
+  ctx.fillStyle = '#6a737e';
+  ctx.fillRect(cx - 6, by + 7, 12, 1);
+  ctx.fillStyle = '#2a2e34';
+  ctx.fillRect(cx - 6, by + 23, 12, 1);
+  // perçinler ve uyarı şeridi
+  ctx.fillStyle = '#9aa3ae';
+  ctx.fillRect(cx - 5, by + 8, 1, 1);
+  ctx.fillRect(cx - 5, by + 22, 1, 1);
+  ctx.fillStyle = '#c8a020';
+  for (let i = 0; i < 4; i++) ctx.fillRect(cx - 5 + i * 3, by + 20, 2, 2);
+  // kol yuvası
+  ctx.fillStyle = '#121418';
+  ctx.fillRect(cx - 1, by + 9, 3, 11);
+  // kol: yukarıdan aşağı iner
+  const k = sw.down ? sw.anim : 0;
+  const ky = Math.round(by + 8 + k * 11);
+  ctx.fillStyle = '#121418';
+  ctx.fillRect(cx - 1, by + 14, 3, 1);
+  ctx.fillStyle = '#8a8f96';
+  ctx.fillRect(cx, Math.min(ky, by + 14), 1, Math.abs(by + 14 - ky) + 1);
+  ctx.fillStyle = '#1a0a08';
+  ctx.fillRect(cx - 2, ky - 2, 5, 4);
+  ctx.fillStyle = '#c0301e';
+  ctx.fillRect(cx - 1, ky - 1, 3, 2);
+  ctx.fillStyle = '#ff7a5a';
+  ctx.fillRect(cx - 1, ky - 1, 1, 1);
+}
+
 /** Sayaç ikonları (9x9). */
 function drawIcon(ctx, kind, x, y, on) {
+  if (kind === 'lever') {
+    ctx.fillStyle = '#5f6772';
+    ctx.fillRect(x + 1, y, 7, 9);
+    ctx.fillStyle = '#1a1c20';
+    ctx.fillRect(x + 2, y + 1, 5, 7);
+    ctx.fillStyle = '#8a8f96';
+    ctx.fillRect(x + 4, y + 2, 1, on ? 5 : 3);
+    ctx.fillStyle = on ? '#7dff8c' : '#ff4a3a';
+    ctx.fillRect(x + 3, on ? y + 6 : y + 1, 3, 2);
+    return;
+  }
   if (kind === 'cage') {
     ctx.fillStyle = '#5f6772';
     ctx.fillRect(x, y, 9, 9);

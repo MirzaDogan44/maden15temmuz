@@ -3,7 +3,7 @@
 import { TILE } from './config.js';
 
 /** Işığı engelleyen ve üstünden yürünemeyen duvar karakterleri. */
-const WALL_CHARS = new Set(['#', 'T', 'H', 'L', 'l']);
+const WALL_CHARS = new Set(['#', 'T', 'H', 'L', 'l', 'Z']);
 /** Yürünemeyen ama ışığı engellemeyen engeller. */
 const OBSTACLE_CHARS = new Set(['k', 'c', '1', '2', '3', 'P', 'W']);
 const ORE_KINDS = { 1: 'gold', 2: 'crystal', 3: 'ruby' };
@@ -32,6 +32,7 @@ export class TileMap {
     this.rails = [];
     this.ores = [];
     this.stands = [];
+    this.switches = [];
     this.signs = [];
     this.decor = [];
     this.darkZones = level.darkZones || [];
@@ -60,6 +61,7 @@ export class TileMap {
           case 'r': this.rails.push({ tx: x, ty: y }); break;
           case '1': case '2': case '3': this.ores.push({ tx: x, ty: y, kind: ORE_KINDS[c] }); break;
           case 'P': this.stands.push({ tx: x, ty: y }); break;
+          case 'Z': this.switches.push({ tx: x, ty: y }); break;
           case 'W': this.signs.push({ tx: x, ty: y }); break;
           case 'k': case 'c': case 'g': case 'm': case 'b': case 'w': case 'x':
             this.decor.push({ type: c, tx: x, ty: y });
@@ -69,7 +71,7 @@ export class TileMap {
     }
     this.elevator = ex1 >= 0 ? { tx: ex0, ty: ey0, tw: ex1 - ex0 + 1, th: ey1 - ey0 + 1 } : null;
 
-    for (const t of [...this.torches, ...this.supports, ...this.lamps]) {
+    for (const t of [...this.torches, ...this.supports, ...this.lamps, ...this.switches]) {
       if (!this.isFace(t.tx, t.ty)) console.warn('Meşale/lamba/kiriş zemine bakan bir duvar yüzünde değil:', t);
     }
   }

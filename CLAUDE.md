@@ -63,8 +63,11 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Değerler `src/config.js` içinde (MAX_CARRY, CARRY_SLOWDOWN).
 
 ### Şalterler
-- Asansör elektriksizdir. Bölümdeki **tüm şalterler** indirilince çalışır.
-- Şalter indirmek **çok büyük bir ses** çıkarır ("KLANK!") ve ekran hafif sarsılır.
+- Asansör elektriksizdir. Bölümdeki **tüm şalterler** indirilince çalışır (yük de tamamsa).
+- Şalter, zemine bakan bir duvar yüzündeki metal kutudur (harita karakteri `Z`). Dokununca madenci yanına gidip kolu indirir.
+- Şalter indirmek **çok büyük bir ses** çıkarır ("KLANK!"), ekran sarsılır, kıvılcım çıkar; şalterin lambası kırmızıdan yeşile döner. Ses yarıçapı en büyüğüdür (Gromm duyma özelliğiyle uzaktan gelir).
+- Asansörün yanındaki küçük panoda her şalter için bir lamba vardır (ör. 1/2); üst ortadaki sayaçta da gösterilir.
+- Şalterler asansörden uzakta ve farklı yönlerde olur; en az biri karanlık bölgededir.
 - 1. bölümde şalter yok, asansör baştan çalışır.
 
 ### Sprint

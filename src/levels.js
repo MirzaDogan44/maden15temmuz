@@ -9,7 +9,8 @@
 //   #  kaya duvar
 //   L  duvar lambası (yanan)          l  söndürülmüş lamba (karanlık bölgelerde)
 //   T  meşale                         H  tahta destek kirişi
-//   (L, l, T, H zemine bakan bir duvar yüzünde olmalı: altı zemin.)
+//   Z  şalter (indirilince asansöre güç verir)
+//   (L, l, T, H, Z zemine bakan bir duvar yüzünde olmalı: altı zemin.)
 //
 // Zemin:
 //   .  zemin                          S  madencinin başladığı yer

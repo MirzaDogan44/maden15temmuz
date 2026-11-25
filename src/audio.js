@@ -777,3 +777,69 @@ export function playScream() {
   // altta derin kükreme
   playRoar();
 }
+
+/**
+ * Şalter: çok büyük, metalik "KLANK!". Sert bir darbe, uzun çınlayan
+ * uyumsuz metal tınıları ve alçak bir tok ses; bolca mağara yankısı.
+ */
+export function playKlank() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const bus = out(1, 0, 0.9);
+  // darbe
+  const src = noiseSource(1.2);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800;
+  bp.Q.value = 0.9;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(0.7, t + 0.002);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  src.connect(bp).connect(ng).connect(bus);
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.1);
+  // metal çınlaması (uyumsuz kısmi tonlar)
+  for (const [f, v, d] of [[212, 0.22, 1.3], [347, 0.18, 1.0], [571, 0.14, 0.8], [893, 0.1, 0.6], [1297, 0.07, 0.45]]) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = f * rand(0.99, 1.01);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(bus);
+    o.start(t);
+    o.stop(t + d + 0.05);
+  }
+  // tok gövde
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(95, t);
+  o.frequency.exponentialRampToValueAtTime(42, t + 0.3);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.5, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+  o.connect(g).connect(bus);
+  o.start(t);
+  o.stop(t + 0.4);
+}
+
+/** Şalterin kolu inerken kısa bir sürtünme. */
+export function playLeverPull() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(0.7);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(900, t);
+  bp.frequency.linearRampToValueAtTime(500, t + 0.15);
+  bp.Q.value = 3;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  src.connect(bp).connect(g).connect(out(1, 0, 0.3));
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.18);
+}
