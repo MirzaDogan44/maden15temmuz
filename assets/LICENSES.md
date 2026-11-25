@@ -21,9 +21,12 @@ Bu klasördeki tüm görseller üçüncü taraf ücretsiz paketlerden gelir. Ses
 - **Minerman Adventure – CC BY-ND 4.0 (NoDerivatives):** Sprite'lar **değiştirilmeden**
   kullanılabilir. Renk değiştirme, yeniden çizme gibi değişikliklerin dağıtılması
   lisansa aykırı olabilir. Oyunda bir "Krediler" ekranında tumas81'e atıf yapılmalı.
+  Oyunda madenci sprite'ları, zemin/duvar dokuları ve `fxs/sparks.png` dosyaları
+  değiştirilmeden çiziliyor; üstlerine sadece ışık/gölge uygulanıyor.
   Madenciyi değiştirmek gerekirse alternatif: Pixel Crawler'daki `Body_A` karakteri
   (değiştirilebilir) veya schwarnhild'in "Pixel Art Explorer Top-Down 32x32" paketi.
-- **10KStudios Rock Boss:** CLAUDE.md'ye göre Gromm için rengi koyu mora çevrilecek.
+- **10KStudios Rock Boss:** Gromm olarak kullanılıyor; dosya değiştirilmiyor, oyun açılırken
+  bellekte koyu mor/griye boyanıyor (`src/gromm.js`).
   Sayfada açık bir lisans görülemedi. Yazar yorumlarda başka bir boss paketi için
   "oyununda kullanabilirsin" demiş, ama bu paket için yazılı izin yok. Ticari
   yayından önce sayfayı kontrol et ya da yazara sor.

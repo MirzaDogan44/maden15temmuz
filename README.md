@@ -26,11 +26,13 @@ src/            oyun kodu
   map.js          harita, çarpışma, ışın testi
   mapRender.js    haritanın önceden çizilmesi
   pathfinding.js  A* ve yol sadeleştirme
-  player.js       madenci
-  lighting.js     karanlık, fener, meşaleler, dithering
+  player.js       madenci (yürüme, kazma, taşıma, meşale)
+  gromm.js        Gromm (boyama, davranış, ağırlık hissi)
+  ore.js          cevherler
+  lighting.js     ortam ışığı, lambalar, karanlık bölgeler, meşale, dithering
   particles.js    toz ve kıvılcımlar
   audio.js        Web Audio ile kodla üretilen sesler
-  scenes/         başlangıç ve oyun sahnesi
+  scenes/         başlangıç, oyun ve bölüm sonu ekranları
 assets/
   madenci/      Minerman Adventure (tumas81)
   gromm/        Top-Down Boss Enemy (10KStudios)
