@@ -24,6 +24,7 @@ import { findPath } from '../pathfinding.js';
 import { Particles } from '../particles.js';
 import { drawText, textWidth } from '../font.js';
 import { Button } from '../ui.js';
+import { Minimap } from '../minimap.js';
 import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
@@ -183,6 +184,7 @@ export class PlayScene {
     });
     this.pending = null;
 
+    this.minimap = new Minimap(this.map);
     this.particles = new Particles();
     this.marker = null;
     this.toasts = [];
@@ -788,7 +790,8 @@ export class PlayScene {
 
   /** Bölüm adı, sayaçlar ve mesajlar. */
   drawOverlay(ctx, w, h) {
-    this.drawCounters(ctx);
+    this.minimap.draw(ctx, 4, 4, this.player, this.t);
+    this.drawCounters(ctx, w);
     if (this.t < 5 && !this.caught) {
       const a = Math.min(1, this.t / 1, (5 - this.t) / 1.2);
       ctx.globalAlpha = Math.max(0, a);
@@ -883,22 +886,29 @@ export class PlayScene {
     ctx.globalAlpha = 1;
   }
 
-  /** Sol üstte: asansördeki ve sırttaki cevher sayısı. */
-  drawCounters(ctx) {
+  /**
+   * Üst ortada kompakt sayaç şeridi (sol üst minimap'e, sağ üst butonlara ait):
+   * asansördeki cevher, taşınan cevher.
+   */
+  drawCounters(ctx, w) {
     const el = this.elevator, p = this.player;
-    const lines = [
-      { icon: 'cage', text: `Asansör ${el.loaded.length}/${el.required}`, color: el.ready ? '#8dff9a' : '#e6d2a8' },
-      { icon: 'sack', text: `Taşınan ${p.carried}/${MAX_CARRY}`, color: p.carried ? '#ffd970' : '#a89a84' },
+    const items = [
+      { icon: 'cage', text: `${el.loaded.length}/${el.required}`, color: el.loaded.length >= el.required ? '#8dff9a' : '#e6d2a8', on: el.ready },
+      { icon: 'sack', text: `${p.carried}/${MAX_CARRY}`, color: p.carried ? '#ffd970' : '#a89a84' },
     ];
-    const w = Math.max(...lines.map((l) => textWidth(l.text))) + 22;
+    const widths = items.map((it) => 12 + textWidth(it.text));
+    const total = widths.reduce((a, b) => a + b, 0) + (items.length - 1) * 8 + 10;
+    let x = Math.floor(w / 2 - total / 2);
+    const y = 4;
     ctx.fillStyle = 'rgba(8,6,10,0.65)';
-    ctx.fillRect(4, 4, w, 30);
+    ctx.fillRect(x, y, total, 15);
     ctx.fillStyle = 'rgba(120,100,80,0.35)';
-    ctx.fillRect(4, 4, w, 1);
-    lines.forEach((l, i) => {
-      const y = 7 + i * 13;
-      drawIcon(ctx, l.icon, 8, y + 1, el.ready && l.icon === 'cage');
-      drawText(ctx, l.text, 20, y, { color: l.color, shadow: '#000' });
+    ctx.fillRect(x, y, total, 1);
+    x += 5;
+    items.forEach((it, i) => {
+      drawIcon(ctx, it.icon, x, y + 3, it.on);
+      drawText(ctx, it.text, x + 12, y + 1, { color: it.color, shadow: '#000' });
+      x += widths[i] + 8;
     });
   }
 

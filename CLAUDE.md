@@ -38,6 +38,11 @@
 
 Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak büyüklükte (en az 44px) olsun.
 
+### Arayüz yerleşimi
+- **Sol üst:** küçük, yarı saydam, pixel art **minimap**. Sadece mağaranın yapısını (yollar), oyuncunun konumunu (yanıp sönen nokta) ve asansörü (belirgin simge) gösterir; karanlık bölgeler daha koyu. Cevherleri, Gromm'u ve şalterleri **göstermez**. Dokunmaları engellemez. Diğer arayüz öğeleri sol üstten uzak tutulur.
+- **Üst orta:** kompakt sayaçlar (asansördeki cevher, taşınan cevher, şalterler) — sadece simge ve sayı.
+- **Sağ üst:** ses ve ayarlar butonları. **Sağ alt:** sprint butonu.
+
 ---
 
 ## Oynanış
