@@ -3,8 +3,10 @@
 
 import * as audio from './audio.js';
 
-// 9x7 piksel ikonlar
+// Piksel ikonlar ('#' dolu)
 const ICONS = {
+  // şimşek: koşu
+  sprint: ['....###', '...###.', '..###..', '.######', '...###.', '..###..', '.###...', '.#.....'],
   soundOn: ['...#.....', '..##.#...', '####..#..', '####..#..', '####..#..', '..##.#...', '...#.....'],
   soundOff: ['...#.....', '..##.....', '####.#.#.', '####..#..', '####.#.#.', '..##.....', '...#.....'],
 };
@@ -15,6 +17,11 @@ const COLORS = {
   edgeLight: '#5a4d42',
   edgeDark: '#120f0d',
   icon: '#d9c9a8',
+  activeFace: '#5a3512',
+  activeEdge: '#e8a040',
+  activeIcon: '#ffe6a0',
+  badFace: '#3a1210',
+  badIcon: '#e05040',
 };
 
 export class Button {
@@ -25,6 +32,11 @@ export class Button {
     this.y = 0;
     this.size = 16;
     this.flash = 0;
+    /** Açık (ör. sprint açık) */
+    this.active = false;
+    /** Kullanılamaz (ör. dayanıklılık bitti); kırmızı yanıp söner */
+    this.blocked = false;
+    this.t = 0;
   }
 
   contains(px, py) {
@@ -33,13 +45,18 @@ export class Button {
 
   draw(ctx) {
     const { x, y, size: s } = this;
-    ctx.fillStyle = COLORS.edgeDark;
+    const blink = this.blocked && Math.floor(this.t * 5) % 2 === 0;
+    ctx.fillStyle = this.active ? COLORS.activeEdge : COLORS.edgeDark;
     ctx.fillRect(x, y, s, s);
-    ctx.fillStyle = this.flash > 0 ? COLORS.faceDown : COLORS.face;
+    ctx.fillStyle = blink ? COLORS.badFace : this.active ? COLORS.activeFace : this.flash > 0 ? COLORS.faceDown : COLORS.face;
     ctx.fillRect(x + 1, y + 1, s - 2, s - 2);
-    ctx.fillStyle = COLORS.edgeLight;
+    ctx.fillStyle = this.active ? COLORS.activeEdge : COLORS.edgeLight;
     ctx.fillRect(x + 1, y + 1, s - 2, 1);
     ctx.fillRect(x + 1, y + 1, 1, s - 2);
+    if (this.active) {
+      ctx.fillStyle = COLORS.edgeDark;
+      ctx.fillRect(x + 2, y + s - 3, s - 4, 1);
+    }
 
     const icon = ICONS[typeof this.icon === 'function' ? this.icon() : this.icon];
     const k = Math.max(1, Math.floor((s - 4) / 12));
@@ -47,7 +64,7 @@ export class Button {
     const ih = icon.length * k;
     const ox = x + Math.floor((s - iw) / 2);
     const oy = y + Math.floor((s - ih) / 2);
-    ctx.fillStyle = COLORS.icon;
+    ctx.fillStyle = this.blocked ? COLORS.badIcon : this.active ? COLORS.activeIcon : COLORS.icon;
     for (let r = 0; r < icon.length; r++) {
       for (let c = 0; c < icon[r].length; c++) {
         if (icon[r][c] === '#') ctx.fillRect(ox + c * k, oy + r * k, k, k);
@@ -96,7 +113,10 @@ export class Hud {
   }
 
   update(dt) {
-    for (const b of this.buttons) b.flash = Math.max(0, b.flash - dt);
+    for (const b of this.buttons) {
+      b.flash = Math.max(0, b.flash - dt);
+      b.t += dt;
+    }
   }
 
   draw(ctx) {

@@ -1,7 +1,7 @@
 // Ses sistemi. Bütün sesler Web Audio API ile kodla üretilir, ses dosyası yok.
 //
 // Tarayıcılar kullanıcı dokunmadan ses çalmaya izin vermez. Bu yüzden
-// init() ilk dokunuşta (pointerdown içinde) çağrılır.
+// init() kullanıcı jesti sayılan olaylarda çağrılır (bkz. input.js onGesture).
 //
 // Yapı:
 //   kaynaklar -> (kuru) master -> hoparlör
@@ -25,6 +25,10 @@ const rand = (a, b) => a + Math.random() * (b - a);
 
 /** Ses sistemini başlatır. Kullanıcı jesti içinde çağrılmalı. */
 export function init() {
+  // Jest sayılmayan bir olayda (ör. dokunmatik pointerdown) bağlam açma:
+  // tarayıcı askıda başlatıp uyarı verir. Bir sonraki jestte (pointerup) açılır.
+  const ua = navigator.userActivation;
+  if (!ctx && ua && !ua.isActive) return false;
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return false;
@@ -687,5 +691,27 @@ export function playHeartbeat(vol) {
     o.connect(g).connect(master);
     o.start(st);
     o.stop(st + 0.2);
+  });
+}
+
+/** Nefes nefese kalma: iki kısa, hırıltılı soluk. vol 0..1 */
+export function playBreath(vol = 1) {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  [[0, 0.32, 1], [0.42, 0.3, 0.8], [0.82, 0.34, 0.6]].forEach(([d, len, k]) => {
+    const st = t + d;
+    const src = noiseSource(rand(0.5, 0.7));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(rand(700, 900), st);
+    bp.frequency.linearRampToValueAtTime(rand(1100, 1400), st + len);
+    bp.Q.value = 1.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.linearRampToValueAtTime(0.16 * vol * k, st + len * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + len);
+    src.connect(bp).connect(g).connect(out(1, 0, 0.15));
+    src.start(st, rand(0, 1.4));
+    src.stop(st + len + 0.02);
   });
 }

@@ -21,6 +21,7 @@ import { Player } from '../player.js';
 import { findPath } from '../pathfinding.js';
 import { Particles } from '../particles.js';
 import { drawText, textWidth } from '../font.js';
+import { Button } from '../ui.js';
 import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
@@ -57,7 +58,26 @@ export class PlayScene {
     this.sparkles = baked.sparkles;
 
     this.player = new Player(this.map.start.x, this.map.start.y);
-    this.player.onStep = () => audio.playStep(false);
+    this.player.onStep = (run) => {
+      audio.playStep(run);
+      const p = this.player;
+      this.emitNoise(p.x, p.y, run ? NOISE.run : NOISE.walk);
+      if (run) this.particles.spawnPuff(p.x, p.y, 2, 6);
+    };
+    this.player.onExhausted = () => {
+      audio.playBreath();
+      this.toast('Nefesin kesildi!', 1.8);
+    };
+    // Sprint butonu (sağ alt, aç/kapa)
+    this.sprintButton = new Button({
+      icon: 'sprint',
+      onTap: () => {
+        if (this.player.dead || this.ending) return;
+        if (!this.player.toggleSprint()) audio.playBreath(0.5);
+        else audio.playUiTap();
+      },
+    });
+    this.staminaAlpha = 0;
 
     // ---- Işıklar ----
     const L = (this.lighting = new Lighting(this.map));
@@ -463,6 +483,11 @@ export class PlayScene {
     this.fadeIn = Math.min(1, this.fadeIn + dt / 1.5);
     for (const tap of taps) {
       if (this.game.hud.handleTap(tap)) continue;
+      if (this.sprintButton.contains(tap.x, tap.y)) {
+        this.sprintButton.flash = 0.12;
+        this.sprintButton.onTap();
+        continue;
+      }
       this.handleTap(tap);
     }
 
@@ -538,7 +563,14 @@ export class PlayScene {
     this.particles.updateEffects(dt);
     for (const ore of this.ores) ore.update(dt);
     this.updateElevator(dt);
-    if (p.moving && Math.random() < dt * 4) this.emitNoise(p.x, p.y, NOISE.walk);
+    // Sprint butonu ve dayanıklılık barının görünürlüğü
+    const sb = this.sprintButton;
+    sb.active = p.sprinting;
+    sb.blocked = p.exhausted;
+    sb.t += dt;
+    sb.flash = Math.max(0, sb.flash - dt);
+    const showBar = p.stamina < 0.999 || p.sprinting;
+    this.staminaAlpha = showBar ? Math.min(1, this.staminaAlpha + dt * 6) : Math.max(0, this.staminaAlpha - dt * 1.5);
     for (const n of this.noises) n.t += dt;
     this.noises = this.noises.filter((n) => n.t < 1);
 
@@ -618,6 +650,9 @@ export class PlayScene {
 
     this.drawEmissive(ctx, camX, camY, w, h);
     this.drawPathMarker(ctx, camX, camY);
+    this.drawStaminaBar(ctx, camX, camY);
+    this.layoutSprintButton(w, h);
+    this.sprintButton.draw(ctx);
     this.drawOverlay(ctx, w, h);
 
     if (this.fadeIn < 1) {
@@ -738,7 +773,8 @@ export class PlayScene {
       ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`;
       ctx.fillRect(0, 0, w, h);
     }
-    let y = h - 22;
+    // Mesajlar sprint butonunun üstünde kalsın (dar ekranlarda çakışmasın)
+    let y = Math.min(h - 22, this.sprintButton.y - 16);
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       const t = this.toasts[i];
       const a = Math.min(1, t.t / 0.25, (t.dur - t.t) / 0.5);
@@ -750,6 +786,57 @@ export class PlayScene {
       ctx.globalAlpha = 1;
       y -= 16;
     }
+  }
+
+  /** Sprint butonu: sağ alt köşe, başparmakla rahat basılacak büyüklükte. */
+  layoutSprintButton(w, h) {
+    const s = Math.round(this.game.screen.buttonSize * 1.3);
+    const m = Math.max(6, Math.round(s / 4));
+    const b = this.sprintButton;
+    b.size = s;
+    b.x = w - s - m;
+    b.y = h - s - m;
+  }
+
+  /** Madencinin başının üstünde küçük dayanıklılık barı (kullanılırken görünür). */
+  drawStaminaBar(ctx, camX, camY) {
+    const a = this.staminaAlpha;
+    const p = this.player;
+    if (a <= 0.01 || p.dead) return;
+    const x = Math.round(p.x - camX) - 9, y = Math.round(p.y - camY) - 39;
+    const W = 18, H = 4;
+    ctx.globalAlpha = a;
+    // şimşek ikonu
+    ctx.fillStyle = '#120c08';
+    ctx.fillRect(x - 5, y - 1, 4, H + 2);
+    ctx.fillStyle = p.exhausted ? '#d83a2a' : '#ffd970';
+    ctx.fillRect(x - 3, y, 1, 2);
+    ctx.fillRect(x - 4, y + 2, 2, 1);
+    ctx.fillRect(x - 3, y + 3, 1, 1);
+    // çerçeve ve zemin
+    ctx.fillStyle = '#120c08';
+    ctx.fillRect(x - 1, y - 1, W + 2, H + 2);
+    ctx.fillStyle = '#2e241c';
+    ctx.fillRect(x, y, W, H);
+    const blink = p.exhausted && Math.floor(this.t * 6) % 2 === 0;
+    const v = p.stamina;
+    const fill = Math.round(W * v);
+    let c1 = '#7fcf5a', c2 = '#b4ec8a';
+    if (v < 0.5) { c1 = '#e0b438'; c2 = '#f6dc7a'; }
+    if (v < 0.25) { c1 = '#e0662e'; c2 = '#f6a070'; }
+    if (p.exhausted) { c1 = blink ? '#ff3a2a' : '#7a1a14'; c2 = blink ? '#ff9a8a' : '#a0302a'; }
+    if (fill > 0) {
+      ctx.fillStyle = c1;
+      ctx.fillRect(x, y, fill, H);
+      ctx.fillStyle = c2;
+      ctx.fillRect(x, y, fill, 1);
+    }
+    if (p.exhausted) {
+      // tekrar koşmak için gereken eşik çizgisi
+      ctx.fillStyle = '#e6d2a8';
+      ctx.fillRect(x + Math.round(W * 0.35), y - 1, 1, H + 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** Sol üstte: asansördeki ve sırttaki cevher sayısı. */

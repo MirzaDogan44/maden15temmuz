@@ -12,8 +12,14 @@ export class Input {
     this.screen = screen;
     /** Bu karede işlenecek tap'ler (oyun pikseli). */
     this.taps = [];
-    /** Her pointerdown'da çağrılır (tarayıcı kullanıcı jesti içinde). */
+    /** Her pointerdown'da çağrılır. */
     this.onPointerDown = null;
+    /**
+     * Tarayıcının "kullanıcı jesti" saydığı her olayda çağrılır. Ses sistemi
+     * bunun içinde başlatılmalı. Dikkat: dokunmatikte pointerdown jest
+     * sayılmaz; pointerup/touchend sayılır. Bu yüzden hepsini dinliyoruz.
+     */
+    this.onGesture = null;
     /** Fare imlecinin son konumu (oyun pikseli) veya null. */
     this.hover = null;
 
@@ -26,6 +32,13 @@ export class Input {
     c.addEventListener('pointerleave', (e) => {
       if (e.pointerType === 'mouse') this.hover = null;
     });
+    const gesture = () => {
+      if (this.onGesture) this.onGesture();
+    };
+    c.addEventListener('pointerdown', gesture);
+    c.addEventListener('pointerup', gesture);
+    c.addEventListener('touchend', gesture);
+    c.addEventListener('click', gesture);
     // Sağ tık menüsü ve uzun basınca çıkan menü olmasın.
     c.addEventListener('contextmenu', (e) => e.preventDefault());
   }

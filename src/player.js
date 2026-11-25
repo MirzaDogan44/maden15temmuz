@@ -1,6 +1,9 @@
 // Madenci: tıkla-yürü hareketi, yön, animasyon ve adım olayları.
 
-import { MINER_SPEED, CARRY_SLOWDOWN, MIN_CARRY_SPEED } from './config.js';
+import {
+  MINER_SPEED, CARRY_SLOWDOWN, MIN_CARRY_SPEED, SPRINT_MULT,
+  STAMINA_DRAIN_TIME, STAMINA_REGEN_DELAY, STAMINA_REGEN_TIME, STAMINA_RECOVER,
+} from './config.js';
 import { MINER_SPRITES, drawMiner } from './assets.js';
 
 const TURN_RATE = 14; // hız vektörünün hedef yöne dönme hızı (1/sn)
@@ -27,8 +30,15 @@ export class Player {
     this.frame = 0;
     this.moving = false;
     this.stuckTime = 0;
-    /** Ayağın yere bastığı karede çağrılır. */
+    /** Ayağın yere bastığı karede çağrılır: onStep(koşuyorMu) */
     this.onStep = null;
+    /** Sprint ve dayanıklılık */
+    this.sprinting = false;
+    this.stamina = 1;
+    this.exhausted = false;
+    this.regenWait = 0;
+    /** Dayanıklılık bitince çağrılır */
+    this.onExhausted = null;
     /** Elinde meşale var mı? (Işığı ileride Gromm'un "görme"sini etkileyecek.) */
     this.hasTorch = false;
     /** Sırttaki çuvaldaki cevherler (tür listesi) */
@@ -40,13 +50,43 @@ export class Player {
     this.deadTime = 0;
   }
 
+  /** Sprint aç/kapa. Dayanıklılık tükenmişse açılamaz (false döner). */
+  toggleSprint() {
+    if (this.exhausted) return false;
+    this.sprinting = !this.sprinting;
+    return true;
+  }
+
+  /** Şu an gerçekten koşuyor mu (sprint açık ve hareket ediyor)? */
+  get running() {
+    return this.sprinting && this.moving;
+  }
+
+  updateStamina(dt) {
+    if (this.running) {
+      this.stamina -= dt / STAMINA_DRAIN_TIME;
+      this.regenWait = STAMINA_REGEN_DELAY;
+      if (this.stamina <= 0) {
+        this.stamina = 0;
+        this.sprinting = false;
+        this.exhausted = true;
+        if (this.onExhausted) this.onExhausted();
+      }
+    } else {
+      this.regenWait -= dt;
+      if (this.regenWait <= 0) this.stamina = Math.min(1, this.stamina + dt / STAMINA_REGEN_TIME);
+      if (this.exhausted && this.stamina >= STAMINA_RECOVER) this.exhausted = false;
+    }
+  }
+
   get carried() {
     return this.cargo.length;
   }
 
   /** Taşıma yüküne göre yürüme hızı. */
   get currentSpeed() {
-    return MINER_SPEED * Math.max(MIN_CARRY_SPEED, 1 - CARRY_SLOWDOWN * this.cargo.length);
+    const carry = Math.max(MIN_CARRY_SPEED, 1 - CARRY_SLOWDOWN * this.cargo.length);
+    return MINER_SPEED * carry * (this.sprinting ? SPRINT_MULT : 1);
   }
 
   /** (x, y)'deki bir hedefi kazmaya başla. onHit her vuruşta çağrılır. */
@@ -119,6 +159,7 @@ export class Player {
       this.deadTime += dt;
       return;
     }
+    this.updateStamina(dt);
     this.speed = this.currentSpeed;
     if (this.dig) {
       const d = this.dig;
@@ -196,7 +237,7 @@ export class Player {
       const anim = MINER_SPRITES.anims.walk;
       this.walkTime += dt * (speedNow / MINER_SPEED);
       const f = Math.floor(this.walkTime * anim.fps) % anim.frames;
-      if (f !== this.frame && (f === 1 || f === 3) && this.onStep) this.onStep();
+      if (f !== this.frame && (f === 1 || f === 3) && this.onStep) this.onStep(this.sprinting);
       this.frame = f;
       this.idleTime = 0;
     } else {

@@ -26,6 +26,17 @@ export const CARRY_SLOWDOWN = 0.1;
 /** ...ama hız bu oranın altına inmez. */
 export const MIN_CARRY_SPEED = 0.55;
 
+/** Sprint: yürüme hızının bu katı. */
+export const SPRINT_MULT = 1.6;
+/** Dolu dayanıklılık bu kadar saniye koşunca biter. */
+export const STAMINA_DRAIN_TIME = 4.5;
+/** Koşmayı bırakınca dolmaya başlamadan önce beklenen süre (sn). */
+export const STAMINA_REGEN_DELAY = 0.9;
+/** Boştan doluya dolma süresi (sn). */
+export const STAMINA_REGEN_TIME = 6;
+/** Tükenince tekrar koşabilmek için gereken doluluk (0..1). */
+export const STAMINA_RECOVER = 0.35;
+
 /**
  * Seslerin Gromm'a ulaştığı yarıçaplar (piksel). Küçükten büyüğe:
  * yürüme < kazma < taş < koşu < şalter. Gromm "duyma" özelliğini alınca

@@ -6,6 +6,7 @@ import { Input } from './input.js';
 import { Hud } from './ui.js';
 import { collectImagePaths, loadImages } from './assets.js';
 import { drawText } from './font.js';
+import * as audio from './audio.js';
 import { StartScene } from './scenes/start.js';
 import { PlayScene } from './scenes/play.js';
 
@@ -26,6 +27,8 @@ class Game {
     this._fpsTime = 0;
 
     this.scene = new StartScene(this);
+    // Ses sistemi ilk kullanıcı jestinde başlar (sonrakilerde askıdaysa devam eder).
+    this.input.onGesture = () => audio.init();
     this.input.onPointerDown = (e) => {
       if (this.scene.onPointerDown) this.scene.onPointerDown(e);
     };

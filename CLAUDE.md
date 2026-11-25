@@ -61,9 +61,16 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - 1. bölümde şalter yok, asansör baştan çalışır.
 
 ### Sprint
-- Hızlı koşarsın ama **çok daha fazla ses** çıkarırsın.
-- **Dayanıklılık barı** azalır, bitince koşamazsın.
+- Sağ alttaki **sprint butonu** aç/kapa çalışır (en az 48px).
+- Sprint açıkken madenci yürüyüşünün **1.6 katı** hızla koşar (taşıma yavaşlaması bunun üstüne uygulanır). Koşu animasyonu daha hızlı oynar, adımlar daha sert ve sık duyulur.
+- Hızlı koşarsın ama **çok daha fazla ses** çıkarırsın (koşu ses yarıçapı).
+- **Dayanıklılık barı** (madencinin başının üstünde, küçük pixel art bar):
+  - Koşarken azalır, dolu bar yaklaşık **4.5 saniyede** biter.
+  - Koşmayınca kısa bir beklemeden (~0.9 sn) sonra yavaşça dolar (boştan doluya ~6 sn).
+  - Bitince sprint otomatik kapanır, bar ve buton kırmızı yanıp söner, madenci nefes nefese kalır (ses). Bar **%35**'e dolana kadar tekrar koşulamaz.
+  - Bar doluyken solup kaybolur; sadece kullanılırken görünür.
 - Koşmak açlığı daha hızlı düşürür.
+- Değerler `src/config.js` içinde (SPRINT_MULT, STAMINA_*).
 
 ### Taş atma
 - Atılan taş düştüğü yerde ses çıkarır ve Gromm'u oraya çeker (duyma özelliği varsa).
