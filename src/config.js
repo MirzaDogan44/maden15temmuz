@@ -18,5 +18,8 @@ export const MAX_FRAME_TIME = 0.25;
 /** Dokunmatik butonların en küçük boyutu (CSS piksel). */
 export const MIN_BUTTON_CSS = 48;
 
+/** Madencinin yürüme hızı (piksel/saniye). Ekranı yaklaşık 3-4 saniyede geçer. */
+export const MINER_SPEED = 115;
+
 /** Adres çubuğunda ?debug varsa FPS ve ölçek bilgisi gösterilir. */
 export const DEBUG = new URLSearchParams(location.search).has('debug');
