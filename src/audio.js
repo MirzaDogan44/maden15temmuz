@@ -562,3 +562,130 @@ export function playElevatorRide() {
     o.stop(st + 0.05);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Gromm
+// ---------------------------------------------------------------------------
+
+/**
+ * Gromm'un adımı: derin "GÜM". dist piksel, pan -1..1.
+ * Uzaktayken boğuk ve kısık (low-pass), yakındayken sert ve yüksek.
+ */
+export function playThud(dist, pan = 0) {
+  if (!live()) return;
+  const near = Math.max(0, 1 - dist / 950);
+  if (near <= 0) return;
+  const t = ctx.currentTime;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 90 + 900 * near * near;
+  lp.Q.value = 0.7;
+  const bus = out(1, pan * 0.8, 0.5 + (1 - near) * 0.4);
+  lp.connect(bus);
+  // gövde: hızla düşen alçak ton
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(rand(62, 75), t);
+  o.frequency.exponentialRampToValueAtTime(28, t + 0.35);
+  const g = ctx.createGain();
+  const vol = 0.75 * Math.pow(near, 1.4) + 0.04;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+  o.connect(g).connect(lp);
+  o.start(t);
+  o.stop(t + 0.55);
+  // taş çatırtısı
+  const src = noiseSource(rand(0.4, 0.7));
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(vol * 0.6, t + 0.005);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  src.connect(ng).connect(lp);
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.2);
+}
+
+/** Gromm madenciyi fark etti: alçak, titreşimli bir hırıltı. */
+export function playGrowl(dist = 0, pan = 0) {
+  if (!live()) return;
+  const near = Math.max(0.15, 1 - dist / 700);
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(70, t);
+  o.frequency.linearRampToValueAtTime(95, t + 0.3);
+  o.frequency.exponentialRampToValueAtTime(50, t + 1.1);
+  const am = ctx.createOscillator();
+  am.frequency.value = 22;
+  const amg = ctx.createGain();
+  amg.gain.value = 0.4;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.3 * near, t + 0.15);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+  am.connect(amg).connect(g.gain);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 500;
+  o.connect(lp).connect(g).connect(out(1, pan, 0.6));
+  o.start(t);
+  am.start(t);
+  o.stop(t + 1.3);
+  am.stop(t + 1.3);
+}
+
+/** Kükreme (yakalama ve bölüm geçişi). */
+export function playRoar() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  for (const [f0, v] of [[90, 0.4], [137, 0.25], [61, 0.35]]) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * 0.8, t);
+    o.frequency.linearRampToValueAtTime(f0 * 1.2, t + 0.25);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.5, t + 1.6);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    o.connect(lp).connect(g).connect(out(1, 0, 0.7));
+    o.start(t);
+    o.stop(t + 1.9);
+  }
+  const src = noiseSource(0.6);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 600;
+  bp.Q.value = 0.6;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(0.35, t + 0.1);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+  src.connect(bp).connect(ng).connect(out(1, 0, 0.6));
+  src.start(t);
+  src.stop(t + 1.6);
+}
+
+/** Kalp atışı (iki vuruş: "tu-dum"). vol 0..1 */
+export function playHeartbeat(vol) {
+  if (!live() || vol < 0.02) return;
+  const t = ctx.currentTime;
+  [[0, 1], [0.16, 0.7]].forEach(([d, k]) => {
+    const st = t + d;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(58, st);
+    o.frequency.exponentialRampToValueAtTime(38, st + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.5 * vol * k, st + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + 0.16);
+    o.connect(g).connect(master);
+    o.start(st);
+    o.stop(st + 0.2);
+  });
+}

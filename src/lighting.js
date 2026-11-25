@@ -371,6 +371,9 @@ export class Lighting {
     const L = LEVELS;
     const ar = AMB[0], ag = AMB[1], ab = AMB[2];
     const dr = DARK[0], dg = DARK[1], db = DARK[2];
+    // Pikseller 32 bit okunup yazılır (Uint8ClampedArray'e kanal kanal
+    // yazmaktan çok daha hızlı). Bayt sırası: A B G R (little-endian).
+    const u32 = new Uint32Array(d.buffer, d.byteOffset, w * h);
     let p = 0;
     for (let y = 0; y < h; y++) {
       const v = (camY + y - CELL / 2) / CELL - this.c0y;
@@ -385,20 +388,25 @@ export class Lighting {
         const a = rowM[i];
         const m = a + (rowM[i + 1] - a) * colF[x];
         const vv = vig[p];
-        const o = p << 2;
         const q = ((m * vv * L + BAYER[by | ((camX + x) & 3)]) | 0) / L;
+        const px = u32[p];
+        const sr = px & 255, sg = (px >>> 8) & 255, sb = (px >>> 16) & 255;
+        let or, og, ob;
         if (q === 0) {
-          d[o] = d[o] * ar * vv + dr * vv;
-          d[o + 1] = d[o + 1] * ag * vv + dg * vv;
-          d[o + 2] = d[o + 2] * ab * vv + db * vv;
-          continue;
+          or = sr * ar * vv + dr * vv;
+          og = sg * ag * vv + dg * vv;
+          ob = sb * ab * vv + db * vv;
+        } else {
+          const c = near + (colF[x] < 0.5 ? i : i + 1);
+          const dk = q < 1 ? (1 - q) * vv : 0;
+          or = sr * (ar * vv + q * CR[c]) + dr * dk;
+          og = sg * (ag * vv + q * CG[c]) + dg * dk;
+          ob = sb * (ab * vv + q * CB[c]) + db * dk;
+          if (or > 255) or = 255;
+          if (og > 255) og = 255;
+          if (ob > 255) ob = 255;
         }
-        const c = near + (colF[x] < 0.5 ? i : i + 1);
-        const kr = ar * vv + q * CR[c], kg = ag * vv + q * CG[c], kb = ab * vv + q * CB[c];
-        const dk = q < 1 ? (1 - q) * vv : 0;
-        d[o] = d[o] * kr + dr * dk;
-        d[o + 1] = d[o + 1] * kg + dg * dk;
-        d[o + 2] = d[o + 2] * kb + db * dk;
+        u32[p] = 0xff000000 | ((ob | 0) << 16) | ((og | 0) << 8) | (or | 0);
       }
     }
   }

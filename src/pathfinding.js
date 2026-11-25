@@ -10,7 +10,7 @@
 import { TILE } from './config.js';
 
 /** Sadeleştirmede duvarlardan bırakılacak pay (madencinin ayak kutusundan biraz geniş). */
-const CLEAR_RX = 6, CLEAR_RY1 = 5, CLEAR_RY2 = 4;
+const DEFAULT_BOX = [6, 5, 4];
 
 const SQRT2 = Math.SQRT2;
 const DIRS = [
@@ -90,12 +90,12 @@ function clamp(v, lo, hi) {
 }
 
 /** Bir kare içinde (gx, gy)'ye en yakın, madencinin sığdığı nokta. */
-function settlePoint(map, tx, ty, gx, gy) {
+function settlePoint(map, tx, ty, gx, gy, box) {
   const m = 7;
   let x = clamp(gx, tx * TILE + (map.isSolid(tx - 1, ty) ? m : 0), (tx + 1) * TILE - (map.isSolid(tx + 1, ty) ? m : 0.01));
   let y = clamp(gy, ty * TILE + (map.isSolid(tx, ty - 1) ? m : 0), (ty + 1) * TILE - (map.isSolid(tx, ty + 1) ? 6 : 0.01));
   const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-  for (let k = 0; k < 12 && map.boxBlocked(x, y, CLEAR_RX, CLEAR_RY1, CLEAR_RY2); k++) {
+  for (let k = 0; k < 12 && map.boxBlocked(x, y, box[0], box[1], box[2]); k++) {
     x += (cx - x) * 0.35;
     y += (cy - y) * 0.35;
   }
@@ -103,12 +103,12 @@ function settlePoint(map, tx, ty, gx, gy) {
 }
 
 /** (a -> b) doğrusu boyunca madencinin gövdesi duvara değmeden geçebilir mi? */
-export function segmentClear(map, ax, ay, bx, by) {
+export function segmentClear(map, ax, ay, bx, by, box = DEFAULT_BOX) {
   const len = Math.hypot(bx - ax, by - ay);
   const steps = Math.max(1, Math.ceil(len / 3));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (map.boxBlocked(ax + (bx - ax) * t, ay + (by - ay) * t, CLEAR_RX, CLEAR_RY1, CLEAR_RY2)) return false;
+    if (map.boxBlocked(ax + (bx - ax) * t, ay + (by - ay) * t, box[0], box[1], box[2])) return false;
   }
   return true;
 }
@@ -117,8 +117,14 @@ export function segmentClear(map, ax, ay, bx, by) {
  * (sx, sy) noktasından (gx, gy)'ye giden yolu bulur.
  * Dönen değer: { points: [{x,y}, ...], target: {x,y}, exact: bool } veya null.
  * points başlangıç noktasını içermez, son eleman hedeftir.
+ *
+ * opts.box: sadeleştirmede kullanılan gövde payı [rx, yukarı, aşağı]
+ * opts.wallCost: duvara bitişik karelere eklenen maliyet (büyük yaratıklar
+ *   tünelin ortasından yürüsün diye)
  */
-export function findPath(map, sx, sy, gx, gy) {
+export function findPath(map, sx, sy, gx, gy, opts = {}) {
+  const box = opts.box || DEFAULT_BOX;
+  const wallCost = opts.wallCost || 0;
   const W = map.w, H = map.h;
   let stx = Math.floor(sx / TILE), sty = Math.floor(sy / TILE);
   if (!map.isWalkable(stx, sty)) return null;
@@ -144,7 +150,7 @@ export function findPath(map, sx, sy, gx, gy) {
     gtx = best % W;
     gty = (best / W) | 0;
   }
-  const target = settlePoint(map, gtx, gty, gx, gy);
+  const target = settlePoint(map, gtx, gty, gx, gy, box);
   const goal = gty * W + gtx;
 
   // A*
@@ -174,7 +180,12 @@ export function findPath(map, sx, sy, gx, gy) {
       if (dx && dy && (!map.isWalkable(x + dx, y) || !map.isWalkable(x, y + dy))) continue;
       const j = ny * W + nx;
       if (closed[j]) continue;
-      const ng = gScore[cur] + cost;
+      let ng = gScore[cur] + cost;
+      if (wallCost) {
+        let near = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (map.isSolid(nx + ox, ny + oy)) near = 1;
+        ng += near * wallCost;
+      }
       if (ng < gScore[j]) {
         gScore[j] = ng;
         came[j] = cur;
@@ -201,7 +212,7 @@ export function findPath(map, sx, sy, gx, gy) {
   let i = 1;
   while (i < pts.length) {
     let j = pts.length - 1;
-    while (j > i && !segmentClear(map, a.x, a.y, pts[j].x, pts[j].y)) j--;
+    while (j > i && !segmentClear(map, a.x, a.y, pts[j].x, pts[j].y, box)) j--;
     out.push(pts[j]);
     a = pts[j];
     i = j + 1;

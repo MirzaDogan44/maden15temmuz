@@ -12,6 +12,7 @@ import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
 import { Ore } from '../ore.js';
+import { Gromm } from '../gromm.js';
 import { images, FX } from '../assets.js';
 import { makeRng } from '../rng.js';
 import { CompleteScene } from './complete.js';
@@ -24,6 +25,25 @@ import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
 
+/**
+ * Harita çizimi pahalı (~0.3 sn), bölüm başına bir kere yapılır. Yeniden
+ * başlarken zemin katmanının temiz bir kopyası alınır (kırılan cevherler
+ * zemine döküntü çizdiği için).
+ */
+const bakeCache = new Map();
+function bakedLevel(levelIndex, map) {
+  let b = bakeCache.get(levelIndex);
+  if (!b) {
+    b = bakeMap(map);
+    bakeCache.set(levelIndex, b);
+  }
+  const ground = document.createElement('canvas');
+  ground.width = b.ground.width;
+  ground.height = b.ground.height;
+  ground.getContext('2d').drawImage(b.ground, 0, 0);
+  return { ...b, ground };
+}
+
 export class PlayScene {
   constructor(game, levelIndex = 0) {
     this.game = game;
@@ -31,7 +51,7 @@ export class PlayScene {
     this.t = 0;
     this.level = LEVELS[levelIndex];
     this.map = new TileMap(this.level);
-    const baked = bakeMap(this.map);
+    const baked = bakedLevel(levelIndex, this.map);
     this.ground = baked.ground;
     this.over = baked.over;
     this.sparkles = baked.sparkles;
@@ -90,7 +110,20 @@ export class PlayScene {
     /** Gromm'un "duyma" özelliği için son sesler: { x, y, r, t } */
     this.noises = [];
     this.ending = null;
+    this.caught = null;
     this.stats = { time: 0 };
+
+    // Gromm
+    const gs = this.map.grommStart || { x: this.map.pw / 2, y: this.map.ph / 2 };
+    this.gromm = new Gromm(gs.x, gs.y);
+    this.gromm.onStomp = (x, y, side) => this.grommStomp(x, y, side);
+    this.gromm.onSpot = () => {
+      const p = this.player;
+      audio.playGrowl(Math.hypot(this.gromm.x - p.x, this.gromm.y - p.y), panOf(this.gromm.x - p.x));
+    };
+    /** Gromm'un bıraktığı, zamanla kaybolan çatlak ve pençe izleri */
+    this.decals = [];
+    this.heartTimer = 0;
     this.handTorch = { x: 0, y: 0, ...HAND_TORCH, intensity: 0, ...flickerState() };
     this.selfGlow = { x: 0, y: 0, ...SELF_GLOW };
 
@@ -186,6 +219,94 @@ export class PlayScene {
   /** Gromm'un ileride duyabileceği bir ses olayı. */
   emitNoise(x, y, r) {
     this.noises.push({ x, y, r, t: 0 });
+  }
+
+  // ---------------- Gromm ----------------
+
+  /** Gromm'un eli/ayağı yere değdi: ses, sarsıntı, toz, iz. */
+  grommStomp(x, y, side) {
+    const p = this.player;
+    const d = Math.hypot(x - p.x, y - p.y);
+    audio.playThud(d, panOf(x - p.x));
+    const amt = 3.2 * Math.pow(Math.max(0, 1 - d / 470), 1.6);
+    if (amt > 0.25) this.game.shake(amt, 0.14);
+    const fx = x + side * 11, fy = y - 1;
+    this.particles.spawnPuff(fx, fy, 5, 16);
+    this.decals.push({ x: fx, y: fy, t: 0, seed: Math.random() * 1000, hand: Math.random() < 0.5 });
+    if (this.decals.length > 40) this.decals.shift();
+    if (d < 270) {
+      // tavandan çakıl düşer, meşaleler titrer
+      const n = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n; k++) {
+        const px = p.x + (Math.random() - 0.5) * 140, py = p.y + (Math.random() - 0.5) * 90;
+        if (!this.map.solidAt(px, py)) this.particles.spawnFalling(px, py);
+      }
+      for (const tr of [...this.torches, ...this.stands, this.handTorch]) {
+        if (Math.hypot(tr.x - x, tr.y - y) < 320) tr.flick *= 0.55;
+      }
+    }
+  }
+
+  updateGromm(dt) {
+    const g = this.gromm, p = this.player;
+    if (this.ending) return;
+    if (this.caught) {
+      this.caught.t += dt;
+      g.update(dt, this.map, p);
+      if (this.caught.t > 2.8) this.game.startPlay(this.levelIndex);
+      return;
+    }
+    g.update(dt, this.map, p);
+    const d = Math.hypot(g.x - p.x, g.y - p.y);
+    if (d < 24 + 4 && !p.dead) {
+      this.caught = { t: 0 };
+      g.attack(p);
+      p.setDead();
+      this.pending = null;
+      this.marker = null;
+      audio.playRoar();
+      this.game.shake(6, 0.6);
+      return;
+    }
+    // Kalp atışı: Gromm yaklaştıkça hızlanır
+    let close = Math.max(0, 1 - d / (10 * TILE));
+    if (g.state === 'chase') close = Math.max(close, 0.45);
+    this.heartTimer -= dt;
+    if (close > 0 && this.heartTimer <= 0) {
+      audio.playHeartbeat(0.2 + 0.8 * close);
+      this.heartTimer = 1.15 - 0.7 * close;
+    }
+    for (const dc of this.decals) dc.t += dt;
+    this.decals = this.decals.filter((dc) => dc.t < 8);
+  }
+
+  /** Gromm'un izleri (ışıktan önce çizilir). */
+  drawDecals(sc, camX, camY) {
+    for (const dc of this.decals) {
+      const a = Math.min(1, (8 - dc.t) / 3) * 0.75;
+      if (a <= 0) continue;
+      const x = Math.round(dc.x - camX), y = Math.round(dc.y - camY);
+      if (x < -20 || y < -20 || x > this.scene.width + 20 || y > this.scene.height + 20) continue;
+      let s = dc.seed;
+      const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+      sc.fillStyle = `rgba(8,5,6,${a.toFixed(2)})`;
+      // çatlaklar
+      for (let k = 0; k < 4; k++) {
+        const ang = rnd() * Math.PI * 2;
+        let px = x, py = y;
+        const len = 4 + Math.floor(rnd() * 6);
+        for (let i = 0; i < len; i++) {
+          px += Math.cos(ang + (rnd() - 0.5)) * 1.2;
+          py += Math.sin(ang + (rnd() - 0.5)) * 0.8;
+          sc.fillRect(Math.round(px), Math.round(py), 1, 1);
+        }
+      }
+      if (dc.hand) {
+        // üç pençe izi
+        for (let k = -1; k <= 1; k++) sc.fillRect(x + k * 3, y - 4, 1, 3);
+        sc.fillRect(x - 3, y - 1, 7, 2);
+      }
+    }
   }
 
   // ---------------- Cevher ----------------
@@ -411,6 +532,7 @@ export class PlayScene {
       this.darkHintCooldown = 10;
     }
 
+    this.updateGromm(dt);
     this.particles.updateDust(dt, p, (x, y) => this.map.solidAt(x, y));
     this.particles.updateEmbers(dt);
     this.particles.updateEffects(dt);
@@ -442,6 +564,10 @@ export class PlayScene {
     const el = this.elevator;
     if (el.loaded.length) list.push({ y: el.y0 + 20, draw: () => this.drawElevatorCargo(sc, camX, camY) });
     if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.player.draw(sc, camX, camY) });
+    const g = this.gromm;
+    if (g.x > camX - 80 && g.x < camX + this.scene.width + 80 && g.y > camY - 20 && g.y < camY + this.scene.height + 130) {
+      list.push({ y: g.y, draw: () => g.draw(sc, camX, camY) });
+    }
     list.sort((a, b) => a.y - b.y);
     for (const e of list) e.draw();
   }
@@ -477,6 +603,7 @@ export class PlayScene {
     sc.fillStyle = '#000';
     sc.fillRect(0, 0, w, h);
     sc.drawImage(this.ground, -camX, -camY);
+    this.drawDecals(sc, camX, camY);
     this.drawEntities(sc, camX, camY);
     sc.drawImage(this.over, -camX, -camY);
 
@@ -565,6 +692,7 @@ export class PlayScene {
     }
     ctx.globalAlpha = 1;
     this.particles.drawEffects(ctx, camX, camY, light, images.get(FX.sparks));
+    this.gromm.drawEyes(ctx, camX, camY, this.t);
     // Asansör lambası
     const el = this.elevator;
     const lx = Math.round(el.lampX - camX) - 1, ly = Math.round(el.lampY - camY);
@@ -585,17 +713,30 @@ export class PlayScene {
   /** Bölüm adı, sayaçlar ve mesajlar. */
   drawOverlay(ctx, w, h) {
     this.drawCounters(ctx);
+    if (this.t < 5 && !this.caught) {
+      const a = Math.min(1, this.t / 1, (5 - this.t) / 1.2);
+      ctx.globalAlpha = Math.max(0, a);
+      drawText(ctx, this.level.name, Math.floor(w / 2), Math.floor(h * 0.18), { color: '#cdbb98', size: 2, align: 'center', shadow: '#000' });
+      ctx.globalAlpha = 1;
+    }
+    if (this.caught) {
+      const t = this.caught.t;
+      const a = t < 0.15 ? 0.55 : Math.max(0, 0.45 - (t - 0.15) * 0.25);
+      ctx.fillStyle = `rgba(150,10,10,${a.toFixed(2)})`;
+      ctx.fillRect(0, 0, w, h);
+      if (t > 0.9) {
+        const b = Math.min(1, (t - 0.9) / 0.8);
+        ctx.fillStyle = `rgba(0,0,0,${b.toFixed(2)})`;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = Math.min(1, (t - 1.1) / 0.4);
+        if (t > 1.1) drawText(ctx, 'Gromm seni yakaladı', Math.floor(w / 2), Math.floor(h / 2 - 8), { color: '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
+        ctx.globalAlpha = 1;
+      }
+    }
     if (this.ending) {
       const a = Math.max(0, Math.min(1, (this.ending.t - 0.8) / 1.4));
       ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`;
       ctx.fillRect(0, 0, w, h);
-    }
-    const bt = this.t;
-    if (bt < 5) {
-      const a = Math.min(1, bt / 1, (5 - bt) / 1.2);
-      ctx.globalAlpha = Math.max(0, a);
-      drawText(ctx, this.level.name, Math.floor(w / 2), Math.floor(h * 0.18), { color: '#cdbb98', size: 2, align: 'center', shadow: '#000' });
-      ctx.globalAlpha = 1;
     }
     let y = h - 22;
     for (let i = this.toasts.length - 1; i >= 0; i--) {
@@ -750,4 +891,8 @@ function drawIcon(ctx, kind, x, y, on) {
     ctx.fillStyle = '#7fd8ff';
     ctx.fillRect(x + 5, y + 1, 2, 2);
   }
+}
+
+function panOf(dx) {
+  return Math.max(-1, Math.min(1, dx / 320));
 }

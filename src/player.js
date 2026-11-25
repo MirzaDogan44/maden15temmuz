@@ -251,7 +251,7 @@ export class Player {
 
   /** Sırttaki cevher çuvalı. */
   drawSack(ctx, camX, camY) {
-    const off = { down: [0, -21], up: [0, -16], left: [6, -18], right: [-6, -18] }[this.dir];
+    const off = { down: [0, -21], up: [0, -16], left: [8, -17], right: [-8, -17] }[this.dir];
     const x = Math.round(this.x - camX + off[0]), y = Math.round(this.y - camY + off[1]);
     const n = this.cargo.length;
     const w = 7 + Math.min(4, n), h = 6 + Math.min(4, n);
