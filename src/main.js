@@ -70,16 +70,30 @@ class Game {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.setTransform(1, 0, 0, 1, this.shakeX, this.shakeY);
+    // Sahneler sarsıntıyı (shakeX/Y) kendileri uygular; oyun sahnesinde
+    // kamera kayar, böylece ışık da aynı hizada kalır. Arayüz sarsılmaz.
     this.scene.draw(ctx, w, h);
-
-    // Arayüz sarsılmaz.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.hud.draw(ctx);
 
     if (DEBUG) {
       const s = this.screen;
       drawText(ctx, `${this.fps} FPS  ${s.width}X${s.height}  X${s.scale}`, 4, h - 14, { color: '#7f7', shadow: '#000' });
+    }
+  }
+
+  /**
+   * Oyun sahnesinde FPS 3 saniye boyunca 45'in altında kalırsa çözünürlüğü
+   * bir kademe düşür (bir kere). Sekme arka plandayken ölçüm yapılmaz.
+   */
+  checkPerformance() {
+    if (this.screen.downscale > 0 || document.hidden || !(this.scene instanceof PlayScene)) return;
+    if (this.scene.t < 2) return;
+    this._slow = this.fps < 45 ? (this._slow || 0) + 1 : 0;
+    if (this._slow >= 6) {
+      this.screen.downscale = 1;
+      this.screen.resize();
+      console.info('Performans için çözünürlük düşürüldü.');
     }
   }
 
@@ -102,6 +116,7 @@ class Game {
         this.fps = Math.round(this._fpsFrames / this._fpsTime);
         this._fpsFrames = 0;
         this._fpsTime = 0;
+        this.checkPerformance();
       }
       requestAnimationFrame(frame);
     };

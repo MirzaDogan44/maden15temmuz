@@ -45,6 +45,7 @@ export class StartScene {
   draw(ctx, w, h) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, w, h);
+    ctx.setTransform(1, 0, 0, 1, this.game.shakeX, this.game.shakeY);
 
     const cx = Math.floor(w / 2);
     const titleSize = Math.max(2, Math.min(5, Math.floor(w / 70)));
@@ -71,6 +72,7 @@ export class StartScene {
       drawText(ctx, msg, cx, y2, { color: '#d9c9a8', size, align: 'center' });
     }
     ctx.globalAlpha = 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /** Karanlıkta yavaşça kırpışan iki göz. */

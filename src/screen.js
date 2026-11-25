@@ -19,6 +19,7 @@ export class Screen {
     /** Bir oyun pikseli kaç CSS pikseline denk geliyor. */
     this.cssPerPixel = 1;
     this.onResize = null;
+    this.downscale = 0;
 
     this.resize = this.resize.bind(this);
     window.addEventListener('resize', this.resize);
@@ -34,7 +35,8 @@ export class Screen {
     const devW = Math.round(cssW * dpr);
     const devH = Math.round(cssH * dpr);
 
-    const scale = Math.max(1, Math.round(Math.min(devW, devH) / TARGET_SHORT_SIDE));
+    // downscale: yavaş cihazlarda piksel boyutu bir kademe büyütülür.
+    const scale = Math.max(1, Math.round(Math.min(devW, devH) / TARGET_SHORT_SIDE)) + this.downscale;
     const w = Math.ceil(devW / scale);
     const h = Math.ceil(devH / scale);
 
