@@ -93,6 +93,14 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 ### Ölüm
 - Gromm yakalarsa veya açlık/soğuk sıfırlanırsa **bölüm baştan başlar.** Can sistemi yok.
 
+### Jumpscare (Gromm yakalayınca)
+1. Oyun bir an donar (~0.2 sn), ekran kararır.
+2. Ekranı kaplayan, önden görünen büyük bir **Gromm yüzü** belirir: kodla çizilmiş 64x64 pixel art (koyu mor/gri taşımsı deri, parlayan kırmızı gözler, açık ağız, sivri dişler), tam sayı katlarıyla büyütülür (`src/jumpscare.js`).
+3. Yüz hızla yaklaşır (büyür), ekran sert sarsılır, kırmızı flaş olur.
+4. Aynı anda Web Audio ile yüksek, bozuk, kısa bir çığlık/kükreme çalar (`playScream`).
+5. Toplam ~1.25 sn; sonra kararır, "Gromm seni yakaladı" yazısıyla bölüm baştan başlar.
+- **Ayarlar** (sağ üstteki dişli): "Ses: Açık/Kapalı" ve "Jumpscare: Açık/Kapalı". Jumpscare kapalıysa yakalanınca sadece kararma ve yazı olur. Ayarlar tarayıcıda saklanır; panel açıkken oyun duraklar.
+
 ---
 
 ## Gromm

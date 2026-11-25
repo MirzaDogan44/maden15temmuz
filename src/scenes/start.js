@@ -32,7 +32,6 @@ export class StartScene {
       return;
     }
     for (const tap of taps) {
-      if (this.game.hud.handleTap(tap)) continue;
       if (this.ready) {
         audio.playStartRumble();
         this.game.shake(3, 0.5);

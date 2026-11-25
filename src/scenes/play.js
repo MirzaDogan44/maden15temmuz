@@ -13,6 +13,8 @@ import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
 import { Ore } from '../ore.js';
 import { Gromm, GROMM } from '../gromm.js';
+import { drawJumpscare, JUMPSCARE } from '../jumpscare.js';
+import * as settings from '../settings.js';
 import { images, FX } from '../assets.js';
 import { makeRng } from '../rng.js';
 import { CompleteScene } from './complete.js';
@@ -267,25 +269,50 @@ export class PlayScene {
     }
   }
 
+  /**
+   * Gromm yakaladı. Oyun donar; ayarlarda jumpscare açıksa yüz ve çığlık,
+   * kapalıysa sadece kararma ve yazı. Sonra bölüm baştan başlar.
+   */
+  onCaught() {
+    const scare = settings.get('jumpscare');
+    this.caught = {
+      t: 0,
+      scare,
+      screamed: false,
+      // yazı ve yeniden başlama zamanları
+      textAt: scare ? JUMPSCARE.end : 0.6,
+      restartAt: scare ? JUMPSCARE.end + 1.5 : 2.2,
+    };
+    this.player.setDead();
+    this.gromm.attack(this.player);
+    this.pending = null;
+    this.marker = null;
+  }
+
+  /** Yakalandıktan sonra: dünya donmuş, sadece zaman ilerler. */
+  updateCaught(dt) {
+    const c = this.caught;
+    c.t += dt;
+    if (c.scare && !c.screamed && c.t >= JUMPSCARE.freeze) {
+      c.screamed = true;
+      audio.playScream();
+    }
+    if (c.t > c.restartAt) this.game.startPlay(this.levelIndex);
+  }
+
+  /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
+  get hideHud() {
+    const c = this.caught;
+    return !!c && c.scare && c.t < JUMPSCARE.end;
+  }
+
   updateGromm(dt) {
     const g = this.gromm, p = this.player;
     if (this.ending) return;
-    if (this.caught) {
-      this.caught.t += dt;
-      g.update(dt, this.map, p);
-      if (this.caught.t > 2.8) this.game.startPlay(this.levelIndex);
-      return;
-    }
     g.update(dt, this.map, p);
     const d = Math.hypot(g.x - p.x, g.y - p.y);
     if (d < GROMM.catchRange && !p.dead) {
-      this.caught = { t: 0 };
-      g.attack(p);
-      p.setDead();
-      this.pending = null;
-      this.marker = null;
-      audio.playRoar();
-      this.game.shake(6, 0.6);
+      this.onCaught();
       return;
     }
     // Kalp atışı: Gromm yaklaştıkça hızlanır
@@ -471,6 +498,10 @@ export class PlayScene {
   }
 
   update(dt, taps) {
+    if (this.caught) {
+      this.updateCaught(dt);
+      return;
+    }
     this.t += dt;
     if (!this.ending) this.stats.time += dt;
     if (this.ending) {
@@ -482,7 +513,6 @@ export class PlayScene {
     }
     this.fadeIn = Math.min(1, this.fadeIn + dt / 1.5);
     for (const tap of taps) {
-      if (this.game.hud.handleTap(tap)) continue;
       if (this.sprintButton.contains(tap.x, tap.y)) {
         this.sprintButton.flash = 0.12;
         this.sprintButton.onTap();
@@ -655,7 +685,7 @@ export class PlayScene {
     this.sprintButton.draw(ctx);
     this.drawOverlay(ctx, w, h);
 
-    if (this.fadeIn < 1) {
+    if (this.fadeIn < 1 && !this.caught) {
       ctx.fillStyle = `rgba(0,0,0,${(1 - this.fadeIn).toFixed(2)})`;
       ctx.fillRect(0, 0, w, h);
     }
@@ -755,17 +785,20 @@ export class PlayScene {
       ctx.globalAlpha = 1;
     }
     if (this.caught) {
-      const t = this.caught.t;
-      const a = t < 0.15 ? 0.55 : Math.max(0, 0.45 - (t - 0.15) * 0.25);
-      ctx.fillStyle = `rgba(150,10,10,${a.toFixed(2)})`;
-      ctx.fillRect(0, 0, w, h);
-      if (t > 0.9) {
-        const b = Math.min(1, (t - 0.9) / 0.8);
+      const c = this.caught;
+      if (c.scare && c.t < JUMPSCARE.end) {
+        drawJumpscare(ctx, w, h, c.t);
+      } else {
+        // kararma ve yazı
+        const b = c.scare ? 1 : Math.min(1, c.t / 0.5);
         ctx.fillStyle = `rgba(0,0,0,${b.toFixed(2)})`;
         ctx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = Math.min(1, (t - 1.1) / 0.4);
-        if (t > 1.1) drawText(ctx, 'Gromm seni yakaladı', Math.floor(w / 2), Math.floor(h / 2 - 8), { color: '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
-        ctx.globalAlpha = 1;
+        const ta = Math.min(1, (c.t - c.textAt) / 0.4);
+        if (ta > 0) {
+          ctx.globalAlpha = ta;
+          drawText(ctx, 'Gromm seni yakaladı', Math.floor(w / 2), Math.floor(h / 2 - 8), { color: '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
+          ctx.globalAlpha = 1;
+        }
       }
     }
     if (this.ending) {

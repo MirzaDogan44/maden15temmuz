@@ -715,3 +715,65 @@ export function playBreath(vol = 1) {
     src.stop(st + len + 0.02);
   });
 }
+
+/**
+ * Jumpscare çığlığı: yüksek, bozuk ve kısa. Birkaç testere dişi ses titreyerek
+ * aşağı kayar, gürültüyle karışır ve sert bir distorsiyondan geçer.
+ */
+export function playScream() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const dur = 1.0;
+  const shaper = ctx.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for (let i = 0; i < curve.length; i++) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * 6) * 0.9;
+  }
+  shaper.curve = curve;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 120;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.55, t + 0.02);
+  g.gain.setValueAtTime(0.55, t + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  shaper.connect(hp).connect(g).connect(out(1, 0, 0.35));
+  const pre = ctx.createGain();
+  pre.gain.value = 0.6;
+  pre.connect(shaper);
+  for (const [f0, f1] of [[880, 420], [1240, 560], [660, 300], [1720, 900]]) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * 0.85, t);
+    o.frequency.linearRampToValueAtTime(f0, t + 0.08);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    // titreme (vibrato)
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = rand(28, 40);
+    const lg = ctx.createGain();
+    lg.gain.value = f0 * 0.05;
+    lfo.connect(lg).connect(o.frequency);
+    const og = ctx.createGain();
+    og.gain.value = 0.25;
+    o.connect(og).connect(pre);
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + dur + 0.05);
+    lfo.stop(t + dur + 0.05);
+  }
+  const src = noiseSource(1.0);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(3000, t);
+  bp.frequency.exponentialRampToValueAtTime(1200, t + dur);
+  bp.Q.value = 0.8;
+  const ng = ctx.createGain();
+  ng.gain.value = 0.5;
+  src.connect(bp).connect(ng).connect(pre);
+  src.start(t);
+  src.stop(t + dur + 0.05);
+  // altta derin kükreme
+  playRoar();
+}

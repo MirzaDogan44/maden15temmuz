@@ -13,7 +13,6 @@ export class CompleteScene {
   update(dt, taps) {
     this.t += dt;
     for (const tap of taps) {
-      if (this.game.hud.handleTap(tap)) continue;
       if (this.t > 1.2) {
         audio.playUiTap();
         this.game.startPlay(this.stats.levelIndex);

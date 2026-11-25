@@ -2,9 +2,12 @@
 // başparmakla rahat basılacak büyüklüktedir (en az 48 CSS piksel).
 
 import * as audio from './audio.js';
+import * as settings from './settings.js';
+import { drawText, textWidth, LINE_HEIGHT } from './font.js';
 
 // Piksel ikonlar ('#' dolu)
 const ICONS = {
+  gear: ['...###...', '.#.###.#.', '..#####..', '###...###', '###...###', '###...###', '..#####..', '.#.###.#.', '...###...'],
   // şimşek: koşu
   sprint: ['....###', '...###.', '..###..', '.######', '...###.', '..###..', '.###...', '.#.....'],
   soundOn: ['...#.....', '..##.#...', '####..#..', '####..#..', '####..#..', '..##.#...', '...#.....'],
@@ -84,8 +87,27 @@ export class Hud {
         audio.playUiTap();
       },
     });
-    this.buttons = [this.soundButton];
+    this.settingsButton = new Button({
+      icon: 'gear',
+      onTap: () => {
+        this.panelOpen = !this.panelOpen;
+        audio.playUiTap();
+      },
+    });
+    this.buttons = [this.soundButton, this.settingsButton];
+    /** Ayarlar paneli açıkken oyun duraklar. */
+    this.panelOpen = false;
+    this.rows = [];
     this.layout();
+  }
+
+  /** Ayarlar panelindeki satırlar: etiket, değer, dokununca ne olacağı. */
+  panelRows() {
+    return [
+      { label: 'Ses', value: audio.isMuted() ? 'Kapalı' : 'Açık', on: !audio.isMuted(), tap: () => audio.toggleMute() },
+      { label: 'Jumpscare', value: settings.get('jumpscare') ? 'Açık' : 'Kapalı', on: settings.get('jumpscare'), tap: () => settings.set('jumpscare', !settings.get('jumpscare')) },
+      { label: 'Kapat', value: '', close: true, tap: () => (this.panelOpen = false) },
+    ];
   }
 
   layout() {
@@ -100,8 +122,19 @@ export class Hud {
     }
   }
 
-  /** Tap bir butona denk geldiyse işler ve true döner. */
+  /** Tap bir butona denk geldiyse işler ve true döner. Panel açıksa her tap'i alır. */
   handleTap(tap) {
+    if (this.panelOpen) {
+      for (const r of this.rows) {
+        if (tap.x >= r.x && tap.x < r.x + r.w && tap.y >= r.y && tap.y < r.y + r.h) {
+          r.tap();
+          audio.playUiTap();
+          return true;
+        }
+      }
+      if (this.settingsButton.contains(tap.x, tap.y)) this.panelOpen = false;
+      return true;
+    }
     for (const b of this.buttons) {
       if (b.contains(tap.x, tap.y)) {
         b.flash = 0.12;
@@ -121,5 +154,41 @@ export class Hud {
 
   draw(ctx) {
     for (const b of this.buttons) b.draw(ctx);
+    if (this.panelOpen) this.drawPanel(ctx);
+  }
+
+  drawPanel(ctx) {
+    const W = this.screen.width, H = this.screen.height;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    const rowH = Math.max(this.screen.buttonSize, 18);
+    const rows = this.panelRows();
+    const pw = Math.min(W - 16, Math.max(150, ...rows.map((r) => textWidth(r.label + '  ' + r.value) + 40)));
+    const ph = 26 + rows.length * (rowH + 4);
+    const px = Math.floor(W / 2 - pw / 2), py = Math.floor(H / 2 - ph / 2);
+    ctx.fillStyle = '#120f0d';
+    ctx.fillRect(px - 1, py - 1, pw + 2, ph + 2);
+    ctx.fillStyle = '#231d19';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = '#5a4d42';
+    ctx.fillRect(px, py, pw, 1);
+    drawText(ctx, 'Ayarlar', px + pw / 2, py + 6, { color: '#e8c560', align: 'center', shadow: '#000' });
+    this.rows = [];
+    rows.forEach((r, i) => {
+      const ry = py + 22 + i * (rowH + 4);
+      const rr = { x: px + 6, y: ry, w: pw - 12, h: rowH, tap: r.tap };
+      this.rows.push(rr);
+      ctx.fillStyle = '#2f2722';
+      ctx.fillRect(rr.x, rr.y, rr.w, rr.h);
+      ctx.fillStyle = '#3d332c';
+      ctx.fillRect(rr.x, rr.y, rr.w, 1);
+      const ty = ry + Math.floor((rowH - LINE_HEIGHT) / 2);
+      if (r.close) {
+        drawText(ctx, r.label, rr.x + rr.w / 2, ty, { color: '#a89a84', align: 'center' });
+        return;
+      }
+      drawText(ctx, r.label, rr.x + 6, ty, { color: '#e6d2a8' });
+      drawText(ctx, r.value, rr.x + rr.w - 6, ty, { color: r.on ? '#8dff9a' : '#ff7a6a', align: 'right' });
+    });
   }
 }

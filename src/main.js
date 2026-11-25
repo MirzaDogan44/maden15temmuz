@@ -51,8 +51,9 @@ class Game {
   }
 
   update(dt) {
-    const taps = this.input.consumeTaps();
-    this.scene.update(dt, taps);
+    // Önce arayüz butonları ve ayarlar paneli; panel açıkken oyun duraklar.
+    const taps = this.input.consumeTaps().filter((t) => !this.hud.handleTap(t));
+    if (!this.hud.panelOpen) this.scene.update(dt, taps);
     this.hud.update(dt);
 
     if (this.shakeTime > 0) {
@@ -77,7 +78,7 @@ class Game {
     // kamera kayar, böylece ışık da aynı hizada kalır. Arayüz sarsılmaz.
     this.scene.draw(ctx, w, h);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.hud.draw(ctx);
+    if (!this.scene.hideHud) this.hud.draw(ctx);
 
     if (DEBUG) {
       const s = this.screen;
