@@ -18,6 +18,13 @@
   src/        (main.js, map.js, player.js, gromm.js, ai/, ui.js, audio.js, levels.js)
   assets/     (sprite'lar, tileset'ler, sesler)
   ```
+- **Eski tarayıcılar** (eski iPhone/iPad Safari'leri, eski Android Chrome'ları dahil):
+  - `index.html` küçük bir yükleyiciyle tarayıcıyı yoklar: modern sözdizimini (`?.`, `??`, `...`, `catch {}`) ve modülleri tanıyanlar `src/main.js`'i doğrudan modül olarak yükler; tanımayanlar ES2015'e çevrilmiş tek dosyalık **`legacy/gromm.js`**'i yükler. Hiçbiri çalışmazsa birkaç saniye sonra "tarayıcı çok eski" uyarısı çıkar.
+  - **`src/` değişince `tools/build-legacy.sh` çalıştır ve `legacy/gromm.js`'i de commit'le** (esbuild ile, Node gerekir). Yoksa eski tarayıcılar eski sürümü oynar.
+  - Test için `?legacy` eski sürümü zorlar.
+  - Girdi Pointer Events ile; olmayan tarayıcılarda (iOS 12 ve öncesi) dokunma + fare olaylarına düşer (`onPointer`, `src/input.js`). Yeni bir dokunma dinleyicisi eklerken bunu kullan.
+  - Eksik olabilecek API'ler için `src/compat.js` (ilk import) küçük tamamlayıcılar içerir; ses `webkitAudioContext`'e düşer, StereoPanner yoksa sesler ortadan çalar. Türkçe büyük harf yerel ayar verisine güvenmeden yapılır (i→İ).
+  - CSS'te yeni özelliklerin (`inset`, `env()`, `max()`) yanında eski karşılığını da ver.
 - Her özellikten sonra oyunu tarayıcıda açıp test et. Küçük ve anlamlı commit'ler at.
 
 ---

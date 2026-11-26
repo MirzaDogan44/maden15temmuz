@@ -9,6 +9,8 @@
 //   - Köşede "Kapat" butonu; gazete dışındaki karanlığa dokunmak da kapatır.
 // Görsel yoksa (henüz yüklenmediyse) kibar bir uyarı gösterilir.
 
+import { onPointer } from './input.js';
+
 export const NEWSPAPER_SRC = 'assets/gazete.png';
 
 const ZOOM = 2;
@@ -23,7 +25,7 @@ export class NewspaperViewer {
   build() {
     const root = document.createElement('div');
     Object.assign(root.style, {
-      position: 'fixed', inset: '0', zIndex: '10', background: 'rgba(0,0,0,0)', transition: 'background 0.35s',
+      position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', zIndex: '10', background: 'rgba(0,0,0,0)', transition: 'background 0.35s',
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none',
     });
     const frame = document.createElement('div');
@@ -47,11 +49,16 @@ export class NewspaperViewer {
     const close = document.createElement('button');
     close.textContent = 'KAPAT';
     Object.assign(close.style, {
-      position: 'fixed', top: 'max(12px, env(safe-area-inset-top))', right: 'max(12px, env(safe-area-inset-right))',
+      position: 'fixed', top: '12px', right: '12px',
       minWidth: '96px', minHeight: '52px', padding: '0 18px', zIndex: '11', cursor: 'pointer',
       font: 'bold 18px monospace', letterSpacing: '2px', color: '#ffe0a0', background: '#4a2e14',
       border: '3px solid #a8743a', boxShadow: '0 0 0 3px #0d0a09', imageRendering: 'pixelated',
     });
+    // çentikli ekranlarda güvenli alan (eski tarayıcılar bu değerleri yok sayar)
+    close.style.top = 'max(12px, env(safe-area-inset-top))';
+    close.style.right = 'max(12px, env(safe-area-inset-right))';
+    if (!close.style.top) close.style.top = '12px';
+    if (!close.style.right) close.style.right = '12px';
     frame.appendChild(img);
     frame.appendChild(missing);
     root.appendChild(frame);
@@ -67,9 +74,9 @@ export class NewspaperViewer {
       img.style.display = 'none';
       missing.style.display = 'block';
     });
-    close.addEventListener('pointerup', (e) => {
-      e.stopPropagation();
-      this.close();
+    onPointer(close, {
+      down: (e) => e.preventDefault(),
+      up: () => this.close(),
     });
     window.addEventListener('resize', () => this.isOpen && this.fit());
 
@@ -78,30 +85,40 @@ export class NewspaperViewer {
     this.tx = 0;
     this.ty = 0;
     let down = null;
-    root.addEventListener('pointerdown', (e) => {
-      if (e.target === close) return; // Kapat butonu kendi olayını alsın
-      down = { x: e.clientX, y: e.clientY, tx: this.tx, ty: this.ty, moved: false, onImg: e.target === img };
-      root.setPointerCapture(e.pointerId);
-    });
-    root.addEventListener('pointermove', (e) => {
-      if (!down) return;
-      const dx = e.clientX - down.x, dy = e.clientY - down.y;
-      if (Math.hypot(dx, dy) > 8) down.moved = true;
-      if (this.zoomed && down.moved) {
-        this.img.style.transition = 'none';
-        this.setPan(down.tx + dx, down.ty + dy);
-      }
-    });
-    root.addEventListener('pointerup', (e) => {
-      const d = down;
-      down = null;
-      this.img.style.transition = 'transform 0.25s ease-out';
-      if (!d || d.moved) return;
-      if (!d.onImg && !this.zoomed) {
-        this.close(); // gazetenin dışındaki karanlığa dokunuldu
-        return;
-      }
-      this.toggleZoom(e.clientX, e.clientY);
+    onPointer(root, {
+      down: (e) => {
+        if (e.target === close) return; // Kapat butonu kendi olayını alsın
+        e.preventDefault();
+        down = { x: e.clientX, y: e.clientY, tx: this.tx, ty: this.ty, moved: false, onImg: e.target === img, id: e.pointerId };
+        if (root.setPointerCapture && typeof e.pointerId === 'number' && window.PointerEvent) {
+          try {
+            root.setPointerCapture(e.pointerId);
+          } catch (err) {
+            /* önemli değil */
+          }
+        }
+      },
+      move: (e) => {
+        if (!down || e.pointerId !== down.id) return;
+        const dx = e.clientX - down.x, dy = e.clientY - down.y;
+        if (Math.hypot(dx, dy) > 8) down.moved = true;
+        if (this.zoomed && down.moved) {
+          this.img.style.transition = 'none';
+          this.setPan(down.tx + dx, down.ty + dy);
+        }
+      },
+      up: (e) => {
+        const d = down;
+        if (!d || e.pointerId !== d.id) return;
+        down = null;
+        this.img.style.transition = 'transform 0.25s ease-out';
+        if (d.moved) return;
+        if (!d.onImg && !this.zoomed) {
+          this.close(); // gazetenin dışındaki karanlığa dokunuldu
+          return;
+        }
+        this.toggleZoom(e.clientX, e.clientY);
+      },
     });
   }
 

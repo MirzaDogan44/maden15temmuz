@@ -29,9 +29,25 @@
       left: 0;
       top: 0;
       display: block;
-      image-rendering: pixelated;
+      image-rendering: optimizeSpeed;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -webkit-optimize-contrast;
       image-rendering: crisp-edges;
+      image-rendering: pixelated;
+      -ms-interpolation-mode: nearest-neighbor;
       cursor: crosshair;
+    }
+    #old {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 40%;
+      padding: 1em;
+      color: #d8c8a8;
+      font-family: monospace;
+      font-size: 16px;
+      text-align: center;
     }
     noscript {
       color: #ccc;
@@ -44,6 +60,34 @@
 <body>
   <canvas id="game"></canvas>
   <noscript>Bu oyun için JavaScript gerekli.</noscript>
-  <script type="module" src="src/main.js"></script>
+  <div id="old">Bu tarayıcı oyunu açmak için çok eski. Lütfen tarayıcını güncelle ya da başka bir tarayıcı dene.</div>
+  <script>
+    // Modern tarayıcılar kaynak kodu (src/) doğrudan modül olarak yükler.
+    // Yeni sözdizimini (?. ?? ... catch{}) ya da modülleri tanımayan eski
+    // tarayıcılar, ES2015'e çevrilmiş tek dosyalık sürümü (legacy/gromm.js) yükler.
+    // Test için ?legacy eski sürümü zorlar.
+    (function () {
+      var modern = false;
+      try {
+        modern = 'noModule' in document.createElement('script') &&
+          !!new Function('var a = { ...{ b: 1 } }; var c = a?.b ?? 0; a.d ||= 1; try {} catch {} return c;');
+      } catch (e) {
+        modern = false;
+      }
+      if (/[?&]legacy\b/.test(location.search)) modern = false;
+      var s = document.createElement('script');
+      if (modern) {
+        s.type = 'module';
+        s.src = 'src/main.js';
+      } else {
+        s.src = 'legacy/gromm.js';
+      }
+      document.body.appendChild(s);
+      // hiçbiri çalışmadıysa (çok eski tarayıcı) bir uyarı göster
+      setTimeout(function () {
+        if (!window.__grommStarted) document.getElementById('old').style.display = 'block';
+      }, 6000);
+    })();
+  </script>
 </body>
 </html>

@@ -25,20 +25,20 @@ export class Input {
 
     this._downs = new Map();
     const c = screen.canvas;
-    c.addEventListener('pointerdown', (e) => this._down(e));
-    c.addEventListener('pointermove', (e) => this._move(e));
-    c.addEventListener('pointerup', (e) => this._up(e));
-    c.addEventListener('pointercancel', (e) => this._downs.delete(e.pointerId));
-    c.addEventListener('pointerleave', (e) => {
-      if (e.pointerType === 'mouse') this.hover = null;
-    });
     const gesture = () => {
       if (this.onGesture) this.onGesture();
     };
-    c.addEventListener('pointerdown', gesture);
-    c.addEventListener('pointerup', gesture);
-    c.addEventListener('touchend', gesture);
-    c.addEventListener('click', gesture);
+    // Pointer Events yoksa (eski iOS Safari ve eski tarayıcılar) dokunma + fare olayları
+    onPointer(c, {
+      down: (e) => this._down(e),
+      move: (e) => this._move(e),
+      up: (e) => this._up(e),
+      cancel: (e) => this._downs.delete(e.pointerId),
+      leave: (e) => {
+        if (e.pointerType === 'mouse') this.hover = null;
+      },
+    });
+    for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click']) c.addEventListener(ev, gesture);
     // Sağ tık menüsü ve uzun basınca çıkan menü olmasın.
     c.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -69,4 +69,58 @@ export class Input {
     this.taps = [];
     return t;
   }
+}
+
+/**
+ * Pointer Events'i olan tarayıcılarda onları, olmayanlarda dokunma ve fare
+ * olaylarını dinler. İşleyicilere hep aynı biçimde bir olay gelir:
+ * { pointerId, pointerType, clientX, clientY, button, target, preventDefault() }
+ */
+export function onPointer(el, { down, move, up, cancel, leave }) {
+  if (window.PointerEvent) {
+    if (down) el.addEventListener('pointerdown', down);
+    if (move) el.addEventListener('pointermove', move);
+    if (up) el.addEventListener('pointerup', up);
+    if (cancel) el.addEventListener('pointercancel', cancel);
+    if (leave) el.addEventListener('pointerleave', leave);
+    return;
+  }
+  const opts = { passive: false };
+  const wrapTouch = (fn) => (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      fn({
+        pointerId: t.identifier, pointerType: 'touch', clientX: t.clientX, clientY: t.clientY, button: 0, target: e.target,
+        preventDefault: () => e.preventDefault(),
+      });
+    }
+  };
+  const wrapMouse = (fn) => (e) => {
+    // dokunmatikte tarayıcının ardından ürettiği sahte fare olaylarını yok say
+    if (Date.now() - lastTouch < 800) return;
+    fn({
+      pointerId: 'mouse', pointerType: 'mouse', clientX: e.clientX, clientY: e.clientY, button: e.button, target: e.target,
+      preventDefault: () => e.preventDefault(),
+    });
+  };
+  let lastTouch = 0;
+  const touched = (fn) => (e) => {
+    lastTouch = Date.now();
+    if (e.cancelable) e.preventDefault(); // kaydırma ve yakınlaştırma olmasın
+    fn(e);
+  };
+  if (down) {
+    el.addEventListener('touchstart', touched(wrapTouch(down)), opts);
+    el.addEventListener('mousedown', wrapMouse(down));
+  }
+  if (move) {
+    el.addEventListener('touchmove', touched(wrapTouch(move)), opts);
+    el.addEventListener('mousemove', wrapMouse(move));
+  }
+  if (up) {
+    el.addEventListener('touchend', touched(wrapTouch(up)), opts);
+    el.addEventListener('mouseup', wrapMouse(up));
+  }
+  if (cancel) el.addEventListener('touchcancel', wrapTouch(cancel), opts);
+  if (leave) el.addEventListener('mouseleave', wrapMouse(leave));
 }

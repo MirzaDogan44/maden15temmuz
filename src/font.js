@@ -108,7 +108,8 @@ function glyph(ch) {
 }
 
 function upper(text) {
-  return String(text).toLocaleUpperCase('tr-TR');
+  // i -> İ, ı -> I elle (eski tarayıcılarda tr-TR yerel ayarı olmayabilir)
+  return String(text).replace(/i/g, 'İ').replace(/ı/g, 'I').toUpperCase();
 }
 
 /** Yazının piksel genişliği (ölçek 1). */

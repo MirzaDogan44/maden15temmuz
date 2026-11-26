@@ -1,5 +1,6 @@
 // Giriş noktası: ekran, giriş, oyun döngüsü ve sahneler.
 
+import './compat.js';
 import { STEP, MAX_FRAME_TIME, DEBUG } from './config.js';
 import { Screen } from './screen.js';
 import { Input } from './input.js';
@@ -216,5 +217,9 @@ class Game {
 const game = new Game(document.getElementById('game'));
 game.startLoop();
 game.load();
+// index.html'deki "tarayıcı çok eski" uyarısı için: oyun başladı
+window.__grommStarted = true;
+const oldMsg = document.getElementById('old');
+if (oldMsg) oldMsg.style.display = 'none';
 
 if (DEBUG) window.game = game;
