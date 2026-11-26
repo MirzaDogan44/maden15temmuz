@@ -128,7 +128,7 @@ class Game {
     }
   }
 
-  run() {
+  startLoop() {
     let last = performance.now();
     let acc = 0;
     const frame = (now) => {
@@ -156,7 +156,7 @@ class Game {
 }
 
 const game = new Game(document.getElementById('game'));
-game.run();
+game.startLoop();
 game.load();
 
 if (DEBUG) window.game = game;

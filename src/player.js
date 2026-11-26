@@ -39,8 +39,12 @@ export class Player {
     this.regenWait = 0;
     /** Dayanıklılık bitince çağrılır */
     this.onExhausted = null;
-    /** Elinde meşale var mı? (Işığı ileride Gromm'un "görme"sini etkileyecek.) */
+    /** Elinde meşale var mı? */
     this.hasTorch = false;
+    /** Meşale yanıyor mu? (meşale butonuyla söndürülüp yakılır) */
+    this.torchOn = false;
+    /** Meşalenin kalan yanma süresi (sn) */
+    this.torchTime = 0;
     /** Sırttaki çuvaldaki cevherler (tür listesi) */
     this.cargo = [];
     /** Kazma durumu: { target, t, cycle, onHit } veya null */
@@ -48,6 +52,24 @@ export class Player {
     /** Yakalandıysa ölüm animasyonu zamanı */
     this.dead = false;
     this.deadTime = 0;
+  }
+
+  /** Elinde yanan bir meşale var mı? */
+  get torchLit() {
+    return this.hasTorch && this.torchOn && this.torchTime > 0;
+  }
+
+  /** Yeni (yanan) bir meşale al: süre yenilenir. */
+  takeTorch(time) {
+    this.hasTorch = true;
+    this.torchOn = true;
+    this.torchTime = time;
+  }
+
+  dropTorch() {
+    this.hasTorch = false;
+    this.torchOn = false;
+    this.torchTime = 0;
   }
 
   /** Sprint aç/kapa. Dayanıklılık tükenmişse açılamaz (false döner). */

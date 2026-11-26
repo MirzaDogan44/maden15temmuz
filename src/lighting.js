@@ -31,16 +31,16 @@ const AMB = [0.03, 0.028, 0.065];
 const DARK = [5, 3, 13];
 
 /** Normal bölgelerdeki loş ortam ışığı (soğuk ton). */
-export const FILL = { color: [0.6, 0.62, 0.82], level: 0.4 };
+export const FILL = { color: [0.55, 0.58, 0.85], level: 0.23 };
 /** Karanlık bölge sınırındaki geçişin uzunluğu (piksel). */
 const DARK_FADE = 80;
 
-export const LAMP = { color: [1.0, 0.72, 0.4], radius: 150, intensity: 0.85 };
-export const TORCH = { color: [1.0, 0.56, 0.26], radius: 125, intensity: 1.0 };
+export const LAMP = { color: [1.0, 0.7, 0.38], radius: 150, intensity: 1.0, falloff: 1.05 };
+export const TORCH = { color: [1.0, 0.56, 0.26], radius: 125, intensity: 1.1, falloff: 1.15 };
 /** Elde taşınan meşale. */
-export const HAND_TORCH = { color: [1.0, 0.62, 0.3], radius: 118, intensity: 1.05 };
+export const HAND_TORCH = { color: [1.0, 0.62, 0.3], radius: 118, intensity: 1.1, falloff: 1.1 };
 /** Madencinin etrafındaki çok küçük hale (meşalesizken karanlıkta tek görünen). */
-export const SELF_GLOW = { color: [0.85, 0.8, 0.75], radius: 22, intensity: 0.28 };
+export const SELF_GLOW = { color: [0.8, 0.78, 0.8], radius: 24, intensity: 0.22 };
 
 export class Lighting {
   constructor(map) {
@@ -133,6 +133,7 @@ export class Lighting {
       return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
     };
     const [cr, cg, cb] = FILL.color;
+    const wd = this.wallDistanceField();
     for (let j = 0; j < gh; j++) {
       for (let i = 0; i < gw; i++) {
         const k = j * gw + i;
@@ -141,13 +142,60 @@ export class Lighting {
         const o = openAt(px, py);
         // büyük ölçekli gölgeli/aydınlık lekeler
         const nz = smoothNoise(px / 150, py / 150);
-        let v = FILL.level * (0.35 + 0.65 * Math.pow(o, 1.3)) * (0.7 + 0.45 * nz);
+        let v = FILL.level * (0.2 + 0.8 * Math.pow(o, 1.8)) * (0.65 + 0.5 * nz);
+        // duvar dipleri iyice kararır
+        const pi = Math.min(gw - 1, Math.max(0, Math.floor(px / CELL))), pj = Math.min(gh - 1, Math.max(0, Math.floor(py / CELL)));
+        v *= 0.45 + 0.55 * Math.min(1, wd[pj * gw + pi] / 14);
         v *= 1 - this.dark[k];
         this.baseR[k] = v * cr;
         this.baseG[k] = v * cg;
         this.baseB[k] = v * cb;
       }
     }
+  }
+
+  /**
+   * Her hücrenin en yakın duvara uzaklığı (piksel, yaklaşık). İki geçişli
+   * "chamfer" uzaklık dönüşümü: hücre sayısıyla doğrusal, hızlı.
+   */
+  wallDistanceField() {
+    const { map, gw, gh } = this;
+    const INF = 1e6;
+    const d = new Float32Array(gw * gh);
+    for (let j = 0; j < gh; j++) {
+      const ty = Math.floor((j * CELL) / TILE);
+      for (let i = 0; i < gw; i++) d[j * gw + i] = map.isOpaque(Math.floor((i * CELL) / TILE), ty) ? 0 : INF;
+    }
+    const a = CELL, b = CELL * 1.414;
+    for (let j = 0; j < gh; j++) {
+      for (let i = 0; i < gw; i++) {
+        const k = j * gw + i;
+        let v = d[k];
+        if (v === 0) continue;
+        if (i > 0) v = Math.min(v, d[k - 1] + a);
+        if (j > 0) {
+          v = Math.min(v, d[k - gw] + a);
+          if (i > 0) v = Math.min(v, d[k - gw - 1] + b);
+          if (i < gw - 1) v = Math.min(v, d[k - gw + 1] + b);
+        }
+        d[k] = v;
+      }
+    }
+    for (let j = gh - 1; j >= 0; j--) {
+      for (let i = gw - 1; i >= 0; i--) {
+        const k = j * gw + i;
+        let v = d[k];
+        if (v === 0) continue;
+        if (i < gw - 1) v = Math.min(v, d[k + 1] + a);
+        if (j < gh - 1) {
+          v = Math.min(v, d[k + gw] + a);
+          if (i < gw - 1) v = Math.min(v, d[k + gw + 1] + b);
+          if (i > 0) v = Math.min(v, d[k + gw - 1] + b);
+        }
+        d[k] = v;
+      }
+    }
+    return d;
   }
 
   /** Bir ışığın hücre hücre katkısını hesaplar (gölgelerle birlikte). */

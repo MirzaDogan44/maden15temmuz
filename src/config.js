@@ -46,6 +46,11 @@ export const STAMINA_RECOVER = 0.35;
  */
 export const NOISE = { walk: 70, dig: 170, stone: 230, run: 280, dynamite: 420, lever: 560 };
 
+/** Elde taşınan meşalenin yanma süresi (sn). Sönükken azalmaz. */
+export const TORCH_BURN_TIME = 120;
+/** Son bu kadar saniyede meşale titreyip kararır. */
+export const TORCH_LOW_TIME = 20;
+
 /** Koklama: yemek yedikten sonra bu kadar saniye iz 2 kat güçlü kalır. */
 export const SCENT_BOOST_TIME = 15;
 

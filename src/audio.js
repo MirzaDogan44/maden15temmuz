@@ -403,6 +403,24 @@ export function playTorchPickup() {
   playTorchCrackle(0.8, 0);
 }
 
+/** Meşaleyi söndürme: kısa bir "fısss". */
+export function playTorchOut() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(1.2);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(2500, t);
+  hp.frequency.exponentialRampToValueAtTime(900, t + 0.45);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+  src.connect(hp).connect(g).connect(out(1, 0, 0.2));
+  src.start(t, rand(0, 1));
+  src.stop(t + 0.55);
+}
+
 /** Kazma vuruşu: metalik "tink" + taşın tok sesi. */
 export function playPickHit() {
   if (!live()) return;

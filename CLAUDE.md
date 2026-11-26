@@ -31,7 +31,8 @@
 | Asansöre yükle | Asansöre tıkla. Taşınan cevherler yüklenir. |
 | Şalter indir | Şaltere tıkla. |
 | Yemek ye | Erzak sandığına tıkla. |
-| Meşale al | Karanlık bölge girişindeki meşale standına tıkla. |
+| Meşale al | Yerdeki sönük meşaleye veya karanlık bölge girişindeki meşale standına tıkla. |
+| Meşaleyi söndür/yak | Sağ alttaki **meşale butonu** (sprintin solunda). |
 | Taş topla | Yerdeki taşa tıkla (en fazla 3). |
 | Taş at | Sağdaki **taş butonuna** bas, sonra hedef noktaya tıkla. |
 | Koş | Sağdaki **sprint butonu**. Mouse ile hem butonu basılı tutup hem başka yere tıklamak mümkün olmadığı için **aç/kapa** şeklinde çalışsın. |
@@ -41,7 +42,7 @@ Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak b
 ### Arayüz yerleşimi
 - **Sol üst:** küçük, yarı saydam, pixel art **minimap**. Sadece mağaranın yapısını (yollar), oyuncunun konumunu (yanıp sönen nokta) ve asansörü (belirgin simge) gösterir; karanlık bölgeler daha koyu. Cevherleri, Gromm'u ve şalterleri **göstermez**. Dokunmaları engellemez. Diğer arayüz öğeleri sol üstten uzak tutulur.
 - **Üst orta:** kompakt sayaçlar (asansördeki cevher, taşınan cevher, şalterler) — sadece simge ve sayı.
-- **Sağ üst:** ses ve ayarlar butonları. **Sağ alt:** sprint butonu.
+- **Sağ üst:** ses ve ayarlar butonları. **Sağ alt:** sprint butonu ve solunda meşale butonu.
 
 ---
 
@@ -86,13 +87,20 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Atılan taş düştüğü yerde ses çıkarır ve Gromm'u oraya çeker (duyma özelliği varsa).
 - Gromm'da **hafıza** özelliği varsa aynı numaraya iki kere kanmaz.
 
-### Karanlık bölgeler ve meşale
-- Madenin çoğu duvar lambaları ve meşalelerle **loş ama görülebilir**. Oyuncu yolları, cevherleri ve çevreyi görebilir.
-- Haritada belirli **karanlık bölgeler** var (en derin tüneller, değerli cevherlerin olduğu odalar). Buralar zifiri karanlıktır.
-- Karanlık bölgelerin girişi belli olur: söndürülmüş lambalar, uyarı tabelası ve karanlığa doğru kararan bir geçiş.
-- Girişte bir **meşale standı** vardır. Standa tıklayan madenci meşaleyi eline alır. Elinde meşale varken **boş bir standa** dokunursa meşaleyi geri bırakır (görme özelliği olan Gromm'dan saklanmak için). Elinde meşale varken etrafında titreyen, sıcak bir ışık dairesi olur; karanlık bölgede ancak o kadarını görür.
-- Meşalesiz karanlık bölgeye giren madenci neredeyse hiçbir şey göremez.
-- Meşalenin ışığı Gromm'un **görme** özelliğiyle bağlantılıdır (ışık taşıyan madenci uzaktan fark edilir).
+### Karanlık, meşale ve saklanma
+- **Genel karanlık:** Normal bölgeler karanlık ve tehlikeli hissettirir ama yol görülebilir. Lambaların ve meşalelerin arası karanlık, köşeler ve duvar dipleri daha da karanlık. Işık havuzları sıcak, titrek ve belirgin; ışıklı/karanlık sınırı dithering ile keskin.
+- **Karanlık bölgeler:** Haritada sınırları belli, meşalesiz zifiri karanlık alanlar. Girişleri belli olur: söndürülmüş lambalar, uyarı tabelası ve kararan bir geçiş. Girişte bir **meşale standı** vardır.
+- **Meşaleler (ışık + ısı):**
+  - Yerde **sönük meşaleler** vardır (bölüm başına 4-5, bölümün tohumuyla her denemede aynı yerlerde; `src/items.js`). Dokununca madenci alır ve yakar. Karanlıkta hafifçe parlarlar.
+  - Standlar da meşale verir. Elinde meşale varken **boş bir standa** dokunursa meşaleyi geri bırakır.
+  - Yanan meşale etrafını aydınlatır (karanlık bölgede görmenin tek yolu), ısıtır (yanarken sıcaklık düşmez, yavaşça artar).
+  - Yaklaşık **2 dakika** yanar (`TORCH_BURN_TIME`); son ~20 sn titreyip kararır. Madencinin başının üstünde küçük bir süre göstergesi vardır. Yeni meşale alınca süre yenilenir. Bitince söner ve elden gider.
+  - Madencinin elinde alev görünür, kıvılcım çıkar.
+- **Meşale butonu** (sprint butonunun solunda): elindeki meşaleyi söndürür/yakar. Sönükken süresi azalmaz ama ısıtmaz da.
+- **Saklanma:** Madenci karanlık bölgede ve meşalesi sönükken Gromm onu **göremez** (sadece neredeyse dibine gelirse fark eder). Kovalıyorsa karanlığa girdiği noktaya kadar gelir, 2-3 sn bakınır, vazgeçer. Sönükken madencinin çevresinde çok küçük, zar zor seçilen bir alan görünür.
+- Özellikler saklanmayı zorlaştırır: **duyma** varsa karanlıkta koşmak/kazmak Gromm'u çeker; **koklama** izi karanlıkta da takip eder; **hafıza** madenciyi en son gördüğü yerleri (ör. karanlık bir girişi) sonra tekrar kontrol eder.
+- Gromm karanlık bölgelere girebilir; orada sadece kırmızı gözleri, güm sesleri ve ekran sarsıntısıyla anlaşılır.
+- 1. bölümde bir karanlık bölgenin girişinde bir kez: "Karanlıkta meşaleni söndür. Gromm seni göremez."
 
 ### Açlık ve soğuk
 - **Açlık barı** zamanla düşer. Erzak sandıklarından yemek yiyerek doldurulur.
@@ -219,7 +227,7 @@ Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
 
 - **Pixel art, üstten bakış.** Karanlık ve ürkütücü bir atmosfer.
 - **Işık:** Madenin tamamı karanlık **değil**.
-  - **Normal bölgeler:** Duvar lambaları ve meşalelerle loş ama rahat görülebilir. Lambaların çevresinde sıcak turuncu ışık havuzları, aralarda soğuk tonlu gölgeler, köşeler ve dar yerler daha karanlık.
+  - **Normal bölgeler:** Karanlık ama yol görülebilir. Lambaların ve meşalelerin çevresinde sıcak, titrek turuncu ışık havuzları; aralarda soğuk tonlu karanlık; köşeler ve duvar dipleri daha karanlık.
   - **Karanlık bölgeler:** Haritada sınırları belli, zifiri karanlık özel alanlar. Orada tek ışık madencinin elindeki meşaledir (bkz. Oynanış > Karanlık bölgeler ve meşale).
   - Madencinin fener konisi yok; asıl ışık kaynakları ortam lambaları ve meşaledir. Madencinin etrafında sadece çok küçük bir hale var.
   - Duvarlar ışığı keser. Işık kenarlarında **dithering** (piksel desenli geçiş) kullan, yumuşak gradyan değil. Işıklı yerler sıcak sarı-turuncu, karanlık yerler soğuk koyu mavi-mor.

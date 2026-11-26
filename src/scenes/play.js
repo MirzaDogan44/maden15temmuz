@@ -7,7 +7,8 @@
 //   3) Ana canvas'a kendi ışığı olanlar eklenir: alevler, kıvılcımlar,
 //      kristal parıltıları, toz, tıklama işareti, mesajlar
 
-import { DEBUG, TILE, NOISE, MAX_CARRY } from '../config.js';
+import { DEBUG, TILE, NOISE, MAX_CARRY, TORCH_BURN_TIME, TORCH_LOW_TIME } from '../config.js';
+import { placeItems } from '../items.js';
 import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
@@ -28,6 +29,7 @@ import { Minimap } from '../minimap.js';
 import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
+const NO_LIGHT_HIDE = false;
 
 /**
  * Harita çizimi pahalı (~0.3 sn), bölüm başına bir kere yapılır. Yeniden
@@ -90,16 +92,21 @@ export class PlayScene {
       },
     });
     this.staminaAlpha = 0;
+    // Meşale butonu (sprintin solunda): elindeki meşaleyi söndürür/yakar
+    this.torchButton = new Button({
+      icon: () => (this.player.torchLit ? 'torch' : 'torchOff'),
+      onTap: () => this.toggleTorch(),
+    });
 
     // ---- Işıklar ----
     const L = (this.lighting = new Lighting(this.map));
-    // Duvar lambaları: sabit, ortam ışığına gömülür.
+    // Duvar lambaları: sıcak, hafifçe titreyen ışık havuzları.
     this.lamps = [];
     for (const lp of this.map.lamps) {
       const x = lp.tx * TILE + 16;
       if (lp.lit) {
-        L.addBaked({ x, y: lp.ty * TILE + 20, ox: x, oy: (lp.ty + 1) * TILE + 2, ...LAMP });
-        this.lamps.push({ x, y: lp.ty * TILE + 13, phase: Math.random() * 10 });
+        const light = L.addStatic({ x, y: lp.ty * TILE + 20, ox: x, oy: (lp.ty + 1) * TILE + 2, ...LAMP });
+        this.lamps.push({ x, y: lp.ty * TILE + 13, light, ...flickerState() });
       }
     }
     // Duvar meşaleleri: titrer.
@@ -127,6 +134,14 @@ export class PlayScene {
       ore.light = L.addStatic({ x: ore.x, y: ore.y - 4, radius: 56, color: ore.type.light, intensity: 0.62, falloff: 1.4 });
       return ore;
     });
+    // Yerdeki eşyalar (sönük meşaleler; her denemede aynı yerlerde)
+    this.items = placeItems(this.map, makeRng(this.level.seed + 7), [{ kind: 'torch', count: 4 + (this.level.seed % 2), darkBias: 0.3 }]).map((it) => ({
+      ...it,
+      taken: false,
+      phase: Math.random() * 10,
+      // karanlıkta da fark edilsin diye çok hafif bir ışık
+      light: L.addStatic({ x: it.x + 3, y: it.y - 6, radius: 22, color: [1, 0.5, 0.2], intensity: 0.35, falloff: 1.3, applyDark: false }),
+    }));
     // Asansör: lamba kırmızı (yük eksik) / yeşil (hazır)
     const e = this.map.elevator;
     this.elevator = {
@@ -198,6 +213,17 @@ export class PlayScene {
         act: () => this.takeTorch(st),
       });
     }
+    for (const it of this.items) {
+      this.targets.push({
+        kind: 'item',
+        obj: it,
+        x: it.x,
+        y: it.y,
+        box: { x0: it.x - 14, y0: it.y - 16, x1: it.x + 14, y1: it.y + 10 },
+        reach: 20,
+        act: () => this.pickItem(it),
+      });
+    }
     for (const ore of this.ores) {
       this.targets.push({
         kind: 'ore',
@@ -260,7 +286,7 @@ export class PlayScene {
     for (const lp of this.lamps) out.push({ kind: 'lamp', x: lp.x, y: lp.y, radius: LAMP.radius });
     for (const t of this.torches) out.push({ kind: 'torch', x: t.x, y: t.y, radius: TORCH.radius });
     for (const s of this.stands) if (s.hasTorch) out.push({ kind: 'stand', x: s.x, y: s.y, radius: 110 });
-    if (this.player.hasTorch) {
+    if (this.player.torchLit) {
       const tip = this.player.torchTip();
       out.push({ kind: 'hand', x: tip.x, y: tip.y, radius: HAND_TORCH.radius });
     }
@@ -272,27 +298,68 @@ export class PlayScene {
     this.toasts.push({ text, t: 0, dur });
   }
 
-  /** Standdan meşale al; elinde meşale varken boş standa dokunursan geri bırakır. */
+  /**
+   * Standdan meşale al (süre yenilenir); elinde meşale varken boş standa
+   * dokunursan meşaleyi geri bırakır.
+   */
   takeTorch(st) {
+    const p = this.player;
     if (!st.hasTorch) {
-      if (this.player.hasTorch) {
+      if (p.hasTorch) {
         st.hasTorch = true;
-        this.player.hasTorch = false;
+        p.dropTorch();
         audio.playTorchPickup();
         this.toast('Meşaleyi standa bıraktın.');
       }
       return;
     }
-    if (this.player.hasTorch) {
-      this.toast('Elinde zaten bir meşale var.');
+    if (p.torchLit && p.torchTime > TORCH_BURN_TIME - 5) {
+      this.toast('Elindeki meşale zaten yeni.');
       return;
     }
     st.hasTorch = false;
     st.light.flicker = 0;
-    this.player.hasTorch = true;
+    p.takeTorch(TORCH_BURN_TIME);
     audio.playTorchPickup();
     this.toast('Meşaleyi aldın.');
     for (let k = 0; k < 8; k++) this.particles.spawnEmber(st.x, st.y);
+  }
+
+  /** Yerdeki eşyayı al (cevher taşırken de alınabilir). */
+  pickItem(it) {
+    if (it.taken) return;
+    const p = this.player;
+    it.light.flicker = 0;
+    if (it.kind === 'torch') {
+      it.taken = true;
+      p.takeTorch(TORCH_BURN_TIME);
+      audio.playTorchPickup();
+      this.toast(p.hasTorch ? 'Meşaleyi yaktın.' : 'Meşaleyi aldın.');
+      for (let k = 0; k < 10; k++) this.particles.spawnEmber(it.x, it.y - 8);
+    }
+    const tg = this.targets.find((t) => t.obj === it);
+    if (tg) tg.disabled = true;
+  }
+
+  /** Meşale butonu: elindeki meşaleyi söndür/yak. */
+  toggleTorch() {
+    const p = this.player;
+    if (p.dead || this.ending) return;
+    if (!p.hasTorch) {
+      this.toast('Elinde meşale yok. Yerdeki meşalelerden al.');
+      audio.playUiTap();
+      return;
+    }
+    p.torchOn = !p.torchOn;
+    if (p.torchOn) {
+      audio.playTorchPickup();
+      const tip = p.torchTip();
+      for (let k = 0; k < 6; k++) this.particles.spawnEmber(tip.x, tip.y - 2);
+    } else {
+      audio.playTorchOut();
+      const tip = p.torchTip();
+      this.particles.spawnPuff(tip.x, tip.y - 2, 3, 6);
+    }
   }
 
   /** Gromm'un ileride duyabileceği bir ses olayı. */
@@ -362,7 +429,13 @@ export class PlayScene {
 
   /** Madencinin elinde yanan bir meşale var mı? */
   get torchLit() {
-    return this.player.hasTorch;
+    return this.player.torchLit;
+  }
+
+  /** Madenci karanlık bölgede ve meşalesi sönük: Gromm onu göremez. */
+  get playerHidden() {
+    const p = this.player;
+    return !p.torchLit && !NO_LIGHT_HIDE && this.lighting.darkAt(p.x, p.y - 8) > 0.5;
   }
 
   /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
@@ -393,7 +466,7 @@ export class PlayScene {
       noises: this.newNoises,
       // karanlık bölgede meşalesi sönük madenci görülemez
       torchLit: this.torchLit,
-      hidden: !this.torchLit && this.map.inDarkZone(p.x, p.y - 8),
+      hidden: this.playerHidden,
       trail: this.trail,
       elevator: { x: (el.x0 + el.x1) / 2, y: el.y1 + 48 },
       time: this.t,
@@ -684,6 +757,11 @@ export class PlayScene {
         this.sprintButton.onTap();
         continue;
       }
+      if (this.torchButton.contains(tap.x, tap.y)) {
+        this.torchButton.flash = 0.12;
+        this.torchButton.onTap();
+        continue;
+      }
       this.handleTap(tap);
     }
 
@@ -713,14 +791,32 @@ export class PlayScene {
       const f = stepFlicker(st, dt, this.t);
       st.light.flicker = st.hasTorch ? f : 0;
     }
+    for (const lp of this.lamps) lp.light.flicker = 0.9 + (stepFlicker(lp, dt, this.t) - 0.93) * 0.35;
     for (const gl of this.glows) if (gl.lamp) gl.light.flicker = 0.75 + Math.sin(this.t * 2.2) * 0.25;
+    // Elde taşınan meşale: yanarken süresi azalır, sonuna doğru titreyip kararır
+    if (p.torchLit && !this.ending) {
+      p.torchTime = Math.max(0, p.torchTime - dt);
+      if (p.torchTime <= 0) {
+        p.dropTorch();
+        audio.playTorchOut();
+        this.particles.spawnPuff(p.x, p.y - 20, 4, 8);
+        this.toast('Meşalen söndü.');
+      } else if (p.torchTime < TORCH_LOW_TIME && !this.torchLowWarned) {
+        this.torchLowWarned = true;
+        this.toast('Meşalen sönmek üzere.');
+      }
+    }
+    if (p.torchTime > TORCH_LOW_TIME) this.torchLowWarned = false;
     const ht = this.handTorch;
-    const hf = stepFlicker(ht, dt, this.t);
+    let hf = stepFlicker(ht, dt, this.t);
+    const low = p.torchLit ? Math.max(0, 1 - p.torchTime / TORCH_LOW_TIME) : 0;
+    if (low > 0) hf *= 1 - low * (0.45 + 0.35 * Math.random());
+    ht.low = low;
     const tip = p.torchTip();
     ht.x = tip.x;
     ht.y = p.y - 4;
-    ht.intensity = p.hasTorch ? HAND_TORCH.intensity * hf : 0;
-    ht.radius = HAND_TORCH.radius * (0.96 + hf * 0.04);
+    ht.intensity = p.torchLit ? HAND_TORCH.intensity * hf : 0;
+    ht.radius = HAND_TORCH.radius * (0.96 + hf * 0.04) * (1 - low * 0.35);
     this.selfGlow.x = p.x;
     this.selfGlow.y = p.y - 6;
 
@@ -737,7 +833,7 @@ export class PlayScene {
       }
       if (dist < 220 && Math.random() < dt * 1.6) audio.playTorchCrackle(Math.pow(1 - dist / 220, 1.5), dx / 220);
     }
-    if (p.hasTorch) {
+    if (p.torchLit) {
       ht.emberTimer -= dt;
       if (ht.emberTimer <= 0) {
         ht.emberTimer = 0.1 + Math.random() * 0.35;
@@ -746,11 +842,17 @@ export class PlayScene {
       if (Math.random() < dt * 1.2) audio.playTorchCrackle(0.35, 0);
     }
 
-    // Karanlık bölge ipucu
+    // Karanlık bölge ipuçları
     this.darkHintCooldown -= dt;
     if (!p.hasTorch && this.lighting.darkAt(p.x, p.y) > 0.6 && this.darkHintCooldown <= 0) {
-      this.toast('Zifiri karanlık... Girişteki standdan meşale al.', 3.5);
+      this.toast("Zifiri karanlık... Bir meşale bul ya da standdan al.", 3.5);
       this.darkHintCooldown = 10;
+    }
+    // 1. bölümde karanlık bir girişin yanında bir kere: saklanma ipucu
+    const hints = this.game.run ? (this.game.run.hints ||= {}) : {};
+    if (this.levelIndex === 0 && !hints.hide && this.fadeIn >= 1 && this.lighting.darkAt(p.x, p.y) > 0.15) {
+      hints.hide = true;
+      this.toast('Karanlıkta meşaleni söndür. Gromm seni göremez.', 5);
     }
 
     this.updateGromm(dt);
@@ -766,6 +868,11 @@ export class PlayScene {
     sb.blocked = p.exhausted;
     sb.t += dt;
     sb.flash = Math.max(0, sb.flash - dt);
+    const tb = this.torchButton;
+    tb.active = p.torchLit;
+    tb.dim = !p.hasTorch;
+    tb.t += dt;
+    tb.flash = Math.max(0, tb.flash - dt);
     const showBar = p.stamina < 0.999 || p.sprinting;
     this.staminaAlpha = showBar ? Math.min(1, this.staminaAlpha + dt * 6) : Math.max(0, this.staminaAlpha - dt * 1.5);
     for (const n of this.noises) n.t += dt;
@@ -789,6 +896,12 @@ export class PlayScene {
     }
     for (const ore of this.ores) {
       if (!ore.broken) list.push({ y: ore.ty * TILE + 28, draw: () => ore.draw(sc, camX, camY) });
+    }
+    for (const it of this.items) {
+      if (it.taken) continue;
+      const x = it.x - camX, y = it.y - camY;
+      if (x < -20 || y < -20 || x > this.scene.width + 20 || y > this.scene.height + 20) continue;
+      list.push({ y: it.y - 4, draw: () => drawItem(sc, it, x, y) });
     }
     for (const sw of this.switches) list.push({ y: (sw.ty + 1) * TILE - 1, draw: () => drawSwitch(sc, sw, camX, camY) });
     const el = this.elevator;
@@ -849,8 +962,10 @@ export class PlayScene {
     this.drawEmissive(ctx, camX, camY, w, h);
     this.drawPathMarker(ctx, camX, camY);
     this.drawStaminaBar(ctx, camX, camY);
+    this.drawTorchTimer(ctx, camX, camY);
     this.layoutSprintButton(w, h);
     this.sprintButton.draw(ctx);
+    this.torchButton.draw(ctx);
     this.drawOverlay(ctx, w, h);
 
     if (this.fadeIn < 1 && !this.caught) {
@@ -869,9 +984,33 @@ export class PlayScene {
     const onScreen = (x, y, m = 40) => x > camX - m && y > camY - m && x < camX + w + m && y < camY + h + m;
     for (const tr of this.torches) if (onScreen(tr.x, tr.y)) drawFlame(ctx, tr.x - camX, tr.y - camY, this.t, tr.phase, tr.flick, 1);
     for (const st of this.stands) if (st.hasTorch && onScreen(st.x, st.y)) drawFlame(ctx, st.x - camX, st.y - camY, this.t, st.phase, st.flick, 1);
-    if (this.player.hasTorch) {
+    if (this.player.torchLit) {
       const tip = this.player.torchTip();
-      drawFlame(ctx, tip.x - camX, tip.y - camY, this.t, this.handTorch.phase, this.handTorch.flick, 0.85);
+      const ht = this.handTorch;
+      drawFlame(ctx, tip.x - camX, tip.y - camY, this.t, ht.phase, ht.flick * (1 - (ht.low || 0) * 0.5), 0.85 * (1 - (ht.low || 0) * 0.3));
+    } else if (this.player.hasTorch) {
+      // sönük meşale: için için yanan bir kor
+      const tip = this.player.torchTip();
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.t * 3);
+      ctx.fillStyle = '#a0300c';
+      ctx.fillRect(Math.round(tip.x - camX), Math.round(tip.y - camY) + 1, 1, 1);
+      ctx.globalAlpha = 1;
+    }
+    // Yerdeki eşyalar karanlıkta hafifçe parlar
+    for (const it of this.items) {
+      if (it.taken || !onScreen(it.x, it.y)) continue;
+      const v = 0.35 + 0.3 * Math.sin(this.t * 2.3 + it.phase);
+      const x = Math.round(it.x - camX), y = Math.round(it.y - camY);
+      ctx.globalAlpha = v;
+      ctx.fillStyle = '#ff7a2a';
+      ctx.fillRect(x + 6, y - 7, 1, 1);
+      ctx.fillRect(x + 8, y - 9, 1, 1);
+      ctx.fillStyle = '#ffc070';
+      if (Math.sin(this.t * 1.7 + it.phase * 3) > 0.9) {
+        ctx.fillRect(x + 6, y - 16, 1, 3);
+        ctx.fillRect(x + 5, y - 15, 3, 1);
+      }
+      ctx.globalAlpha = 1;
     }
     // Lamba camları
     for (const lp of this.lamps) {
@@ -1002,6 +1141,39 @@ export class PlayScene {
     b.size = s;
     b.x = w - s - m;
     b.y = h - s - m;
+    // meşale butonu sprintin solunda, biraz küçük
+    const t = this.torchButton;
+    t.size = Math.round(s * 0.85);
+    t.x = b.x - t.size - Math.round(m * 0.8);
+    t.y = h - t.size - m;
+  }
+
+  /** Elde meşale varken madencinin başının üstünde küçük bir süre göstergesi. */
+  drawTorchTimer(ctx, camX, camY) {
+    const p = this.player;
+    if (!p.hasTorch || p.dead) return;
+    const x = Math.round(p.x - camX) - 7, y = Math.round(p.y - camY) - 38;
+    const W = 14;
+    const f = Math.max(0, Math.min(1, p.torchTime / TORCH_BURN_TIME));
+    const low = p.torchTime < TORCH_LOW_TIME;
+    const blinkOff = low && p.torchLit && Math.floor(this.t * 4) % 2 === 0;
+    ctx.globalAlpha = p.torchLit ? 0.9 : 0.55;
+    // küçük alev ikonu
+    ctx.fillStyle = '#120c08';
+    ctx.fillRect(x - 5, y - 2, 4, 5);
+    ctx.fillStyle = p.torchLit ? '#ffb040' : '#6a5040';
+    ctx.fillRect(x - 4, y - 1, 2, 3);
+    ctx.fillRect(x - 3, y - 2, 1, 1);
+    // bar
+    ctx.fillStyle = '#120c08';
+    ctx.fillRect(x - 1, y - 1, W + 2, 4);
+    ctx.fillStyle = '#2a1c12';
+    ctx.fillRect(x, y, W, 2);
+    if (!blinkOff) {
+      ctx.fillStyle = low ? '#d8482a' : p.torchLit ? '#ff9a30' : '#8a6040';
+      ctx.fillRect(x, y, Math.max(1, Math.round(W * f)), 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** Madencinin başının üstünde küçük dayanıklılık barı (kullanılırken görünür). */
@@ -1009,7 +1181,7 @@ export class PlayScene {
     const a = this.staminaAlpha;
     const p = this.player;
     if (a <= 0.01 || p.dead) return;
-    const x = Math.round(p.x - camX) - 9, y = Math.round(p.y - camY) - 39;
+    const x = Math.round(p.x - camX) - 9, y = Math.round(p.y - camY) - (p.hasTorch ? 45 : 39);
     const W = 18, H = 4;
     ctx.globalAlpha = a;
     // şimşek ikonu
@@ -1126,6 +1298,31 @@ function stepFlicker(s, dt, t) {
   }
   s.flick += (s.target - s.flick) * (1 - Math.exp(-18 * dt));
   return s.flick + Math.sin(t * 7.1 + s.phase) * 0.05;
+}
+
+/** Yerdeki eşya (ışıktan önce çizilir). */
+function drawItem(ctx, it, x, y) {
+  x = Math.round(x);
+  y = Math.round(y);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(x - 7, y - 1, 14, 3);
+  if (it.kind === 'torch') {
+    // çapraz yatan sönük meşale: sap ve kömürleşmiş bez
+    for (let i = 0; i < 14; i++) {
+      const px = x - 8 + i, py = y - Math.floor(i / 2);
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(px, py - 1, 1, 4);
+      ctx.fillStyle = i % 3 === 0 ? '#6a4626' : '#8a5e36';
+      ctx.fillRect(px, py, 1, 2);
+    }
+    ctx.fillStyle = '#140e0c';
+    ctx.fillRect(x + 3, y - 11, 7, 7);
+    ctx.fillStyle = '#3a2a22';
+    ctx.fillRect(x + 4, y - 10, 5, 5);
+    ctx.fillStyle = '#5c4636';
+    ctx.fillRect(x + 4, y - 10, 2, 1);
+    ctx.fillRect(x + 4, y - 8, 4, 1);
+  }
 }
 
 /** Standdaki meşalenin sapı (ışıktan önce çizilir). */

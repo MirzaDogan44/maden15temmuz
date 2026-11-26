@@ -10,6 +10,9 @@ const ICONS = {
   gear: ['...###...', '.#.###.#.', '..#####..', '###...###', '###...###', '###...###', '..#####..', '.#.###.#.', '...###...'],
   // şimşek: koşu
   sprint: ['....###', '...###.', '..###..', '.######', '...###.', '..###..', '.###...', '.#.....'],
+  // meşale: yanan / sönük
+  torch: ['....#....', '...##....', '..####...', '..#####..', '...###...', '....#....', '....#....', '....#....', '....#....', '....#....'],
+  torchOff: ['.....#...', '...#.....', '....#....', '.........', '...###...', '....#....', '....#....', '....#....', '....#....', '....#....'],
   soundOn: ['...#.....', '..##.#...', '####..#..', '####..#..', '####..#..', '..##.#...', '...#.....'],
   soundOff: ['...#.....', '..##.....', '####.#.#.', '####..#..', '####.#.#.', '..##.....', '...#.....'],
 };
@@ -67,7 +70,7 @@ export class Button {
     const ih = icon.length * k;
     const ox = x + Math.floor((s - iw) / 2);
     const oy = y + Math.floor((s - ih) / 2);
-    ctx.fillStyle = this.blocked ? COLORS.badIcon : this.active ? COLORS.activeIcon : COLORS.icon;
+    ctx.fillStyle = this.blocked ? COLORS.badIcon : this.active ? COLORS.activeIcon : this.dim ? '#6a5e50' : COLORS.icon;
     for (let r = 0; r < icon.length; r++) {
       for (let c = 0; c < icon[r].length; c++) {
         if (icon[r][c] === '#') ctx.fillRect(ox + c * k, oy + r * k, k, k);
