@@ -233,6 +233,16 @@ Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış dön
 - Test: `?level=6`.
 - Test için `?level=3` ile istenen bölümden başlanabilir.
 
+### Gazete (hikâye girişi)
+- Sadece **yeni oyunda** ve **1. bölümde**, başlangıcın birkaç adım yakınında yerde buruşuk eski bir gazete (kodla çizilmiş sarımsı kâğıt, silik satırlar). Karanlıkta hafifçe parlar, üstünde ara sıra "!" veya parıltı belirir.
+- Dokununca madenci yürür, eğilip alır, kâğıt hışırtısı çalar (`playPaperRustle`), sonra gazete açılır (`src/newspaper.js`):
+  - Arka plan kararır; `assets/gazete.png` oranı bozulmadan ekrana sığan en büyük boyutta, **yumuşak ölçeklemeyle** (pixel art değil, okunaklı) gösterilir. Oyunun canvas'ı yerine üstüne açılan bir HTML katmanında çizilir.
+  - Açılış: aşağıdan kayarak gelir, hafif dönerek düzelir.
+  - Dokununca dokunulan yere 2 kat yakınlaşır, parmakla kaydırılır; tekrar dokununca uzaklaşır.
+  - Köşede "KAPAT" butonu; gazete dışındaki karanlığa dokunmak da kapatır. Açıkken oyun durur.
+  - Görsel yoksa "Gazete görseli bulunamadı" uyarısı çıkar.
+- Sonra gazete madencide kalır: duraklatma menüsünde "Gazeteyi Oku". Okumak zorunlu değil.
+
 ### Bölüm açılış ekranları
 Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
 - Tamamen siyah, her şey ortada. Üstte küçük gri "Bölüm N/6".

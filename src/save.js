@@ -32,7 +32,7 @@ export function peek() {
 export function write(data) {
   if (!storageOk) return false;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ level: data.level, order: data.order, time: Math.round(data.time || 0) }));
+    localStorage.setItem(KEY, JSON.stringify({ level: data.level, order: data.order, time: Math.round(data.time || 0), newspaper: !!data.newspaper }));
     return true;
   } catch {
     return false;

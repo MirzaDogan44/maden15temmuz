@@ -53,7 +53,8 @@ class Game {
 
   /** Yeni oyun: Gromm'un özellik sırası karıştırılır (oyun boyunca sabit). */
   newRun() {
-    this.run = { order: shuffledOrder(), time: 0 };
+    // fresh: yeni oyun (gazete sadece yeni oyunda 1. bölümde yerde durur)
+    this.run = { order: shuffledOrder(), time: 0, fresh: true };
   }
 
   /** Bu bölümde Gromm'un özellikleri. */
@@ -97,14 +98,14 @@ class Game {
   continueGame() {
     const d = save.take();
     if (!d) return this.newGame();
-    this.run = { order: d.order, time: d.time || 0 };
+    this.run = { order: d.order, time: d.time || 0, newspaper: !!d.newspaper };
     this.startLevel(d.level);
   }
 
   /** Duraklatma menüsü: ulaşılan bölümü, özellik sırasını ve toplam süreyi kaydet, menüye dön. */
   saveAndQuit() {
     const sc = this.scene;
-    if (this.run && sc instanceof PlayScene) save.write({ level: sc.levelIndex, order: this.run.order, time: this.run.time });
+    if (this.run && sc instanceof PlayScene) save.write({ level: sc.levelIndex, order: this.run.order, time: this.run.time, newspaper: this.run.newspaper });
     if (sc.onLeave) sc.onLeave();
     this.run = null;
     this.toMenu();

@@ -1300,3 +1300,24 @@ export function stopMenuMusic(fade = 2) {
     m.bus.disconnect();
   }, fade * 1000 + 200);
 }
+
+/** Kâğıt hışırtısı (gazeteyi alma). */
+export function playPaperRustle() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  for (let k = 0; k < 6; k++) {
+    const st = t + k * rand(0.04, 0.08);
+    const src = noiseSource(rand(1.2, 1.8));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = rand(2500, 5000);
+    bp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(rand(0.06, 0.14), st + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + rand(0.05, 0.12));
+    src.connect(bp).connect(g).connect(out(1, 0, 0.15));
+    src.start(st, rand(0, 1.5));
+    src.stop(st + 0.14);
+  }
+}

@@ -9,6 +9,7 @@
 
 import { DEBUG, TILE, NOISE, MAX_CARRY, TORCH_BURN_TIME, TORCH_LOW_TIME, SURVIVAL_SPEED, HUNGER_TIME, HUNGER_RUN_MULT, COLD_TIME, COLD_DARK_MULT, WARM_FIRE_TIME, WARM_TORCH_TIME, FOOD, SCENT_BOOST_TIME } from '../config.js';
 import { placeItems } from '../items.js';
+import { newspaper } from '../newspaper.js';
 import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
@@ -156,6 +157,19 @@ export class PlayScene {
         color: it.kind === 'torch' ? [1, 0.5, 0.2] : it.kind === 'dynamite' ? [1, 0.3, 0.2] : [1, 0.85, 0.5],
       }),
     }));
+    // Hikâye girişi: yeni oyunda 1. bölümde, başlangıcın birkaç adım yakınında gazete
+    const run = game.run;
+    if (levelIndex === 0 && run && run.fresh && !run.newspaper) {
+      const spot = this.newspaperSpot();
+      if (spot) {
+        this.items.push({
+          kind: 'newspaper', tx: spot.tx, ty: spot.ty, x: spot.x, y: spot.y, taken: false, phase: 0,
+          light: L.addStatic({ x: spot.x, y: spot.y - 4, radius: 26, color: [1, 0.95, 0.7], intensity: 0.45, falloff: 1.3, applyDark: false }),
+        });
+      }
+    }
+    this.paperOpen = false;
+    this.bending = null;
     // Açlık ve sıcaklık (0..1)
     this.hunger = 1;
     this.warmth = 1;
@@ -377,6 +391,14 @@ export class PlayScene {
   pickItem(it) {
     if (it.taken) return;
     const p = this.player;
+    if (it.kind === 'newspaper') {
+      // eğilip alır, kâğıt hışırdar, sonra gazete açılır
+      it.taken = true;
+      p.stop();
+      this.pending = null;
+      this.bending = { t: 0 };
+      if (this.game.run) this.game.run.newspaper = true;
+    }
     if (FOOD[it.kind]) {
       it.taken = true;
       p.stop();
@@ -409,6 +431,32 @@ export class PlayScene {
     it.light.flicker = 0;
     const tg = this.targets.find((t) => t.obj === it);
     if (tg) tg.disabled = true;
+  }
+
+  /** Başlangıcın 2-4 adım yakınında açık bir zemin karesi. */
+  newspaperSpot() {
+    const map = this.map;
+    const sx = Math.floor(map.start.x / TILE), sy = Math.floor(map.start.y / TILE);
+    const used = new Set(this.items.map((i) => i.ty * map.w + i.tx));
+    for (const r of [2, 3, 4]) {
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [r, r], [-r, r], [0, -r], [r, -r], [-r, -r]]) {
+        const tx = sx + dx, ty = sy + dy;
+        let ok = !used.has(ty * map.w + tx);
+        for (let oy = -1; oy <= 1 && ok; oy++) for (let ox = -1; ox <= 1; ox++) if (map.isSolid(tx + ox, ty + oy)) ok = false;
+        if (ok && findPath(map, map.start.x, map.start.y, (tx + 0.5) * TILE, (ty + 0.6) * TILE)) return { tx, ty, x: (tx + 0.5) * TILE, y: (ty + 0.6) * TILE };
+      }
+    }
+    return null;
+  }
+
+  /** Gazeteyi aç (oyun durur). Duraklatma menüsündeki "Gazeteyi Oku" da bunu çağırır. */
+  openNewspaper() {
+    if (this.paperOpen) return;
+    this.paperOpen = true;
+    this.onPause();
+    newspaper.open(() => {
+      this.paperOpen = false;
+    });
   }
 
   /** Meşale butonu: elindeki meşaleyi söndür/yak. */
@@ -531,7 +579,7 @@ export class PlayScene {
   /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
   get hideHud() {
     const c = this.caught;
-    return !!c && c.scare && c.t < JUMPSCARE.end;
+    return this.paperOpen || (!!c && c.scare && c.t < JUMPSCARE.end);
   }
 
   updateGromm(dt) {
@@ -1010,7 +1058,7 @@ export class PlayScene {
   }
 
   handleTap(tap) {
-    if (this.ending || this.player.dead) return;
+    if (this.ending || this.player.dead || this.bending) return;
     this.eating = null;
     if (this.arming) this.cancelArming();
     const wx = tap.x + Math.round(this.camX), wy = tap.y + Math.round(this.camY);
@@ -1048,6 +1096,21 @@ export class PlayScene {
     if (this.caught) {
       this.updateCaught(dt);
       return;
+    }
+    // gazete açıkken oyun durur (Gromm hareket etmez)
+    if (this.paperOpen) return;
+    if (this.bending) {
+      this.bending.t += dt;
+      if (this.bending.t > 0.25 && !this.bending.sound) {
+        this.bending.sound = true;
+        audio.playPaperRustle();
+      }
+      if (this.bending.t > 0.6) {
+        this.bending = null;
+        this.toast('Eski bir gazete buldun. Duraklatma menüsünden tekrar okuyabilirsin.', 3.5);
+        this.openNewspaper();
+        return;
+      }
     }
     this.t += dt;
     if (!this.ending) {
@@ -1325,6 +1388,22 @@ export class PlayScene {
       const v = 0.35 + 0.3 * Math.sin(this.t * 2.3 + it.phase);
       const x = Math.round(it.x - camX), y = Math.round(it.y - camY);
       ctx.globalAlpha = v;
+      if (it.kind === 'newspaper') {
+        ctx.globalAlpha = 1;
+        const bob = Math.round(Math.sin(this.t * 3) * 1.5);
+        if (Math.floor(this.t / 1.6) % 2 === 0) {
+          ctx.fillStyle = '#1a1408';
+          ctx.fillRect(x - 2, y - 24 + bob, 4, 9);
+          ctx.fillStyle = '#ffe070';
+          ctx.fillRect(x - 1, y - 23 + bob, 2, 5);
+          ctx.fillRect(x - 1, y - 17 + bob, 2, 1);
+        } else if (Math.sin(this.t * 5) > 0.6) {
+          ctx.fillStyle = '#fff4c0';
+          ctx.fillRect(x + 5, y - 14, 1, 3);
+          ctx.fillRect(x + 4, y - 13, 3, 1);
+        }
+        continue;
+      }
       if (it.kind !== 'torch') {
         // yiyecek: arada bir küçük parıltı
         if (Math.sin(this.t * 1.5 + it.phase * 3) > 0.88) {
@@ -1864,6 +1943,7 @@ export class PlayScene {
     let jx = 0, jy = 0;
     if (this.warmth < 0.25 && !p.dead) jx = Math.random() < 0.5 ? -1 : 1;
     if (this.eating) jy = Math.floor(this.eating.t * 8) % 2;
+    if (this.bending) jy = this.bending.t < 0.45 ? 2 : 1; // eğilip alır
     if (cold <= 0.01) {
       p.draw(sc, camX - jx, camY - jy);
     } else {
@@ -2103,7 +2183,26 @@ function drawItem(ctx, it, x, y) {
   y = Math.round(y);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(x - 7, y - 1, 14, 3);
-  if (it.kind === 'bread') {
+  if (it.kind === 'newspaper') {
+    // buruşuk, sarımsı eski gazete; üstünde silik satırlar
+    ctx.fillStyle = '#2a2418';
+    ctx.fillRect(x - 8, y - 9, 16, 10);
+    ctx.fillRect(x - 7, y - 10, 13, 12);
+    ctx.fillStyle = '#c8b888';
+    ctx.fillRect(x - 7, y - 9, 14, 8);
+    ctx.fillStyle = '#e0d4a8';
+    ctx.fillRect(x - 6, y - 9, 6, 3);
+    ctx.fillRect(x + 1, y - 6, 5, 2);
+    ctx.fillStyle = '#9a8a60';
+    ctx.fillRect(x - 1, y - 9, 1, 8); // kat yeri
+    ctx.fillStyle = '#6a5e48';
+    ctx.fillRect(x - 6, y - 5, 4, 1);
+    ctx.fillRect(x - 6, y - 3, 5, 1);
+    ctx.fillRect(x + 1, y - 8, 5, 1);
+    ctx.fillRect(x + 1, y - 3, 4, 1);
+    ctx.fillStyle = '#3a3226';
+    ctx.fillRect(x - 6, y - 8, 4, 2); // başlık
+  } else if (it.kind === 'bread') {
     ctx.fillStyle = '#2a1608';
     ctx.fillRect(x - 7, y - 7, 14, 7);
     ctx.fillRect(x - 6, y - 8, 12, 9);
