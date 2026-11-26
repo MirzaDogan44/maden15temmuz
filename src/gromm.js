@@ -20,6 +20,11 @@ import { images, GROMM_SPRITES } from './assets.js';
 import { findPath } from './pathfinding.js';
 
 const SCALE = 2;
+const PARAMS = new URLSearchParams(location.search);
+/** ?digsoon: Gromm birkaç saniyede bir kazar (test için) */
+export const DIG_SOON = PARAMS.has('digsoon');
+/** ?digdebug: kazma yolu ve çıkış noktası ekranda görünür */
+export const DIG_DEBUG = PARAMS.has('digdebug');
 const FEET = 57; // karede ayakların olduğu satır
 export const GROMM = {
   /** Dolaşırken: madencinin yürüyüşünden yavaş */
@@ -62,6 +67,28 @@ export const GROMM = {
   patrolEvery: 35,
   /** Hafıza: hatırladığı son görülme yeri sayısı */
   memorySize: 3,
+
+  // --- Kazma (her bölümde) ---
+  /** Duvarın içinden en fazla bu kadar ilerler */
+  digMaxDist: 10 * TILE,
+  /** Duvara bu kadar uzaktan yönelip kazmaya başlayabilir */
+  digReach: 3 * TILE,
+  /** İki kazma arası en az bekleme (sn) */
+  digCooldown: DIG_SOON ? 4 : 15,
+  /** Dolaşırken kazma aralığı (sn) */
+  wanderDigMin: DIG_SOON ? 3 : 20,
+  wanderDigMax: DIG_SOON ? 5 : 30,
+  /** Yeraltındaki hızı: normal yürüyüşüne yakın */
+  digSpeed: MINER_SPEED * 0.9,
+  /** Aşama süreleri (sn) */
+  digDive: 1.0,
+  digWarn: 1.15,
+  digEmerge: 0.45,
+  digRecover: 1.0,
+  /** Madencinin bu kadar yakınına çıkamaz */
+  digPlayerGap: 3 * TILE,
+  /** Asansörün çevresinde bu kadar tile'a çıkamaz */
+  digElevatorGap: 3,
 };
 
 // --- Boyama ---
@@ -158,6 +185,13 @@ export class Gromm {
     this.patrolIndex = 0;
     /** Final bölümü: öfkeli (biraz daha hızlı, madencinin yerini bilir) */
     this.rage = false;
+    /** Kazma: null veya { phase, t, ex, ey (giriş), tx, ty (çıkış), resume } */
+    this.dig = null;
+    this.digCooldown = DIG_SOON ? 2 : 10;
+    this.wanderDigTimer = GROMM.wanderDigMin + Math.random() * (GROMM.wanderDigMax - GROMM.wanderDigMin);
+    this.digCheck = 0;
+    /** Kazma olayları: onDig(olay, veri) — 'dive' | 'vanish' | 'warn' | 'emerge' | 'done' */
+    this.onDig = null;
     this.smellTimer = 0;
     this.trackT = -1;
     this.checkedElevator = false;
@@ -310,6 +344,11 @@ export class Gromm {
 
   update(dt, map, player) {
     this.stateTime += dt;
+    this.digCooldown -= dt;
+    if (this.dig) {
+      this.updateDig(dt, map, player);
+      return;
+    }
     const alive = !player.dead;
     const dist = Math.hypot(player.x - this.x, player.y - this.y);
 
@@ -407,6 +446,9 @@ export class Gromm {
         this.path = [];
         break;
     }
+
+    // Kazma: dolaşırken arada bir başka bölgeye, hedefe giderken kestirmeden
+    if (alive && !this.rage && this.considerDig(dt, map, player)) return;
 
     // Hareket: hedef hız; keskin dönüşte yavaşlar
     const st = this.state;
@@ -506,6 +548,336 @@ export class Gromm {
     }
   }
 
+  // ---------------- Kazma ----------------
+
+  /** Gromm şu an görünmüyor mu (duvarın içinde)? */
+  get underground() {
+    const d = this.dig;
+    return !!d && (d.phase === 'under' || d.phase === 'warn' || (d.phase === 'dive' && d.t >= GROMM.digDive * 0.75));
+  }
+
+  /** Çıkış noktası uygun mu: yürünebilir, asansörün dibi değil, madenciden uzak. */
+  canExit(map, x, y, player) {
+    const [rx, ry1, ry2] = GROMM.box;
+    if (map.boxBlocked(x, y, rx + 4, ry1 + 2, ry2 + 2)) return false;
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (map.isSolid(tx + dx, ty + dy)) return false;
+    const eb = this.senses.elevatorBox;
+    if (eb) {
+      const g = GROMM.digElevatorGap * TILE;
+      if (x > eb.x0 - g && x < eb.x1 + g && y > eb.y0 - g && y < eb.y1 + g) return false;
+    }
+    if (player && !player.dead && Math.hypot(x - player.x, y - player.y) < GROMM.digPlayerGap) return false;
+    return true;
+  }
+
+  /** Gromm'dan (x, y) yönüne giden çizgide ilk duvar; yakındaysa giriş noktası. */
+  entryToward(map, x, y) {
+    const dx = x - this.x, dy = y - this.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1) return null;
+    const ux = dx / d, uy = dy / d;
+    for (let s = 4; s <= GROMM.digReach + 4; s += 4) {
+      const px = this.x + ux * s, py = this.y - 6 + uy * s;
+      if (map.isOpaque(Math.floor(px / TILE), Math.floor(py / TILE))) {
+        return { x: this.x + ux * Math.max(0, s - 6), y: this.y + uy * Math.max(0, s - 6), wx: px, wy: py, ux, uy };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Hedef noktasının çevresinde uygun bir çıkış ve ona giden duvar girişi bul.
+   * near: çıkışın yakın olması tercih edilen nokta.
+   */
+  planDig(map, near, player) {
+    const cands = [{ x: near.x, y: near.y }];
+    for (const r of [1, 2, 3, 4]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + r;
+        cands.push({ x: near.x + Math.cos(a) * r * TILE, y: near.y + Math.sin(a) * r * TILE });
+      }
+    }
+    for (const c of cands) {
+      const entry = this.entryToward(map, c.x, c.y);
+      if (!entry) continue;
+      const under = Math.hypot(c.x - entry.x, c.y - entry.y);
+      if (under > GROMM.digMaxDist || under < 2.5 * TILE) continue;
+      if (!this.canExit(map, c.x, c.y, player)) continue;
+      // çıkışa yürüyerek de ulaşılabilmeli (kapalı bir cebe çıkmasın)
+      if (!findPath(map, c.x, c.y, this.x, this.y, { box: GROMM.box, wallCost: 2.5 })) continue;
+      return { entry, exit: { x: c.x, y: c.y } };
+    }
+    return null;
+  }
+
+  /** Bir yöndeki duvara dalıp aynı doğrultuda en uzak uygun çıkış. */
+  planAlong(map, ang, player) {
+    const far = { x: this.x + Math.cos(ang) * GROMM.digMaxDist, y: this.y + Math.sin(ang) * GROMM.digMaxDist };
+    const entry = this.entryToward(map, far.x, far.y);
+    if (!entry) return null;
+    for (let dd = GROMM.digMaxDist - 0.5 * TILE; dd >= 3 * TILE; dd -= TILE / 2) {
+      const x = entry.x + entry.ux * dd, y = entry.y + entry.uy * dd;
+      if (!this.canExit(map, x, y, player)) continue;
+      if (!findPath(map, x, y, this.x, this.y, { box: GROMM.box, wallCost: 2.5 })) continue;
+      return { entry, exit: { x, y } };
+    }
+    return null;
+  }
+
+  pathLength() {
+    let len = 0, px = this.x, py = this.y;
+    for (const p of this.path) {
+      len += Math.hypot(p.x - px, p.y - py);
+      px = p.x;
+      py = p.y;
+    }
+    return len;
+  }
+
+  /** Kazmalı mı? Kazmaya başladıysa true döner. */
+  considerDig(dt, map, player) {
+    if (this.digCooldown > 0) return false;
+    const st = this.state;
+    if (st === 'idle' || st === 'wander') {
+      this.wanderDigTimer -= dt;
+      if (this.wanderDigTimer > 0) return false;
+      // uygun duvar yoksa dolaşırken her saniye tekrar dener
+      this.wanderDigTimer = 1;
+      // özellikler çıkış yerini etkiler (duyma, koklama, hafıza)
+      const pref = this.preferredExit(map);
+      const tries = [];
+      if (pref) tries.push(() => this.planDig(map, pref, player));
+      // haritanın başka bir bölgesine: yakındaki bir duvarın öbür tarafı
+      const a0 = Math.random() * Math.PI * 2;
+      for (let k = 0; k < 16; k++) tries.push(() => this.planAlong(map, a0 + (k * Math.PI * 2) / 16, player));
+      for (const tr of tries) {
+        const plan = tr();
+        if (!plan) continue;
+        const walk = findPath(map, this.x, this.y, plan.exit.x, plan.exit.y, { box: GROMM.box, wallCost: 2.5 });
+        const under = Math.hypot(plan.exit.x - plan.entry.x, plan.exit.y - plan.entry.y);
+        if (walk && walk.points.length && this.lengthOf(walk.points) < under * 1.4) continue; // yürümek zaten kısa
+        this.startDig(plan, { state: 'wander' });
+        return true;
+      }
+      return false;
+    }
+    if (st !== 'chase' && st !== 'search' && st !== 'track' && st !== 'patrol') return false;
+    this.digCheck -= dt;
+    if (this.digCheck > 0 || !this.path.length) return false;
+    this.digCheck = 1;
+    const goal = st === 'chase' ? { x: player.x, y: player.y } : this.path[this.path.length - 1];
+    const straight = Math.hypot(goal.x - this.x, goal.y - this.y);
+    if (straight > GROMM.digMaxDist + GROMM.digReach) return false;
+    const walk = this.pathLength();
+    if (straight * 2 >= walk) return false;
+    if (!map.rayBlocked(this.x, this.y - 10, goal.x, goal.y - 10)) return false;
+    const plan = this.planDig(map, goal, player);
+    if (!plan) return false;
+    const under = Math.hypot(plan.exit.x - plan.entry.x, plan.exit.y - plan.entry.y);
+    if (under * 2 >= walk) return false;
+    this.startDig(plan, { state: st });
+    return true;
+  }
+
+  lengthOf(points) {
+    let len = 0, px = this.x, py = this.y;
+    for (const p of points) {
+      len += Math.hypot(p.x - px, p.y - py);
+      px = p.x;
+      py = p.y;
+    }
+    return len;
+  }
+
+  /** Özelliklere göre tercih edilen çıkış yakını (yoksa null). */
+  preferredExit() {
+    // duyma: son duyulan ses; koklama: en taze iz; hafıza: son görüldüğü yer
+    if (this.has('duyma')) {
+      let best = null;
+      for (const n of this.senses.noises) if (Math.hypot(n.x - this.x, n.y - this.y) <= Math.max(n.r, GROMM.digMaxDist)) best = n;
+      if (best) return best;
+    }
+    if (this.has('koklama')) {
+      const now = this.senses.time;
+      let best = null;
+      for (const pt of this.senses.trail) {
+        if (now - pt.t > GROMM.trailLife * (pt.s || 1)) continue;
+        if (Math.hypot(pt.x - this.x, pt.y - this.y) > GROMM.digMaxDist) continue;
+        if (!best || pt.t > best.t) best = pt;
+      }
+      if (best) return best;
+    }
+    if (this.has('hafiza') && this.memory.length) {
+      const m = this.memory[0];
+      if (Math.hypot(m.x - this.x, m.y - this.y) < GROMM.digMaxDist + GROMM.digReach) return m;
+    }
+    return null;
+  }
+
+  startDig(plan, resume) {
+    const { entry, exit } = plan;
+    this.dig = {
+      phase: 'dive', t: 0,
+      ex: entry.wx, ey: entry.wy, // duvardaki giriş noktası
+      sx: entry.x, sy: entry.y, // dalmadan önce durduğu yer
+      tx: exit.x, ty: exit.y,
+      resume, retargets: 0, wait: 0,
+    };
+    this.path = [];
+    this.setDirToward(entry.ux, entry.uy);
+    this.anim = 'stomp';
+    this.animT = 0;
+    if (this.onDig) this.onDig('dive', { x: entry.wx, y: entry.wy, ux: entry.ux, uy: entry.uy });
+  }
+
+  setDirToward(dx, dy) {
+    if (Math.abs(dx) > Math.abs(dy)) this.dir = dx < 0 ? 'left' : 'right';
+    else this.dir = dy < 0 ? 'up' : 'down';
+  }
+
+  updateDig(dt, map, player) {
+    const d = this.dig;
+    d.t += dt;
+    this.vx = this.vy = 0;
+    switch (d.phase) {
+      case 'dive': {
+        // duvara yürüyüp kazar, sonra içine dalar
+        const k = 1 - Math.exp(-6 * dt);
+        this.x += (d.sx - this.x) * k;
+        this.y += (d.sy - this.y) * k;
+        this.animT += dt;
+        if (d.t >= GROMM.digDive * 0.75 && !d.vanished) {
+          d.vanished = true;
+          if (this.onDig) this.onDig('vanish', { x: d.ex, y: d.ey });
+        }
+        if (d.t >= GROMM.digDive) {
+          d.phase = 'under';
+          d.t = 0;
+          this.x = d.ex;
+          this.y = d.ey;
+        }
+        break;
+      }
+      case 'under': {
+        // özellikler yeraltında da çalışır (görme hariç)
+        if (d.retargets < 2) {
+          let near = null;
+          if (this.has('duyma')) {
+            for (const n of this.senses.noises) if (Math.hypot(n.x - this.x, n.y - this.y) <= n.r) near = n;
+          }
+          if (!near && this.has('koklama') && Math.floor((d.t - dt) / 1.5) !== Math.floor(d.t / 1.5)) {
+            const pt = this.freshTrailPoint();
+            if (pt && Math.hypot(pt.x - d.tx, pt.y - d.ty) > 2 * TILE) near = pt;
+          }
+          if (near) {
+            const c = this.exitNear(map, near, player, d);
+            if (c) {
+              d.tx = c.x;
+              d.ty = c.y;
+              d.retargets++;
+            }
+          }
+        }
+        const dx = d.tx - this.x, dy = d.ty - this.y;
+        const dist = Math.hypot(dx, dy);
+        const step = GROMM.digSpeed * dt;
+        if (dist > step) {
+          this.x += (dx / dist) * step;
+          this.y += (dy / dist) * step;
+          this.setDirToward(dx, dy);
+        } else {
+          this.x = d.tx;
+          this.y = d.ty;
+          // çıkmadan önce son kontrol: madenci çok yakınsa başka yer seç ya da bekle
+          if (!this.canExit(map, d.tx, d.ty, player)) {
+            d.wait += dt;
+            const c = this.exitNear(map, { x: d.tx, y: d.ty }, player, d);
+            if (c) {
+              d.tx = c.x;
+              d.ty = c.y;
+            }
+            if (d.wait < 4) break;
+            if (!this.canExit(map, d.tx, d.ty, null)) break;
+          }
+          d.phase = 'warn';
+          d.t = 0;
+          if (this.onDig) this.onDig('warn', { x: d.tx, y: d.ty });
+        }
+        break;
+      }
+      case 'warn':
+        if (d.t >= GROMM.digWarn && !this.canExit(map, d.tx, d.ty, player)) {
+          // madenci tam çıkış yerine geldi: üstüne çıkma, başka yerden çık
+          const c = this.exitNear(map, { x: d.tx + (d.tx - player.x), y: d.ty + (d.ty - player.y) }, player, d);
+          if (c) {
+            d.tx = c.x;
+            d.ty = c.y;
+          }
+          d.phase = 'under';
+          d.t = 0;
+          if (this.onDig) this.onDig('cancel', { x: this.x, y: this.y });
+          break;
+        }
+        if (d.t >= GROMM.digWarn) {
+          d.phase = 'emerge';
+          d.t = 0;
+          this.anim = 'swipe';
+          this.animT = 0;
+          this.dir = 'down';
+          if (this.onDig) this.onDig('emerge', { x: this.x, y: this.y });
+        }
+        break;
+      case 'emerge':
+        this.animT += dt;
+        if (d.t >= GROMM.digEmerge) {
+          d.phase = 'recover';
+          d.t = 0;
+          this.anim = 'idle';
+          this.animT = 0;
+        }
+        break;
+      case 'recover': {
+        // sersemler, silkelenir
+        this.animT += dt;
+        this.frame = Math.floor(this.animT * GROMM_SPRITES.anims.idle.fps) % GROMM_SPRITES.anims.idle.frames;
+        if (Math.floor(d.t / 0.25) !== Math.floor((d.t - dt) / 0.25)) this.dir = ['left', 'right'][Math.floor(d.t / 0.25) % 2];
+        if (d.t >= GROMM.digRecover) this.finishDig(map);
+        break;
+      }
+    }
+  }
+
+  /** Bir noktanın yakınında, şu anki yerden çok uzak olmayan uygun çıkış. */
+  exitNear(map, near, player, d) {
+    for (const r of [0, 1, 2, 3]) {
+      for (let k = 0; k < (r ? 8 : 1); k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const x = near.x + Math.cos(a) * r * TILE, y = near.y + Math.sin(a) * r * TILE;
+        if (Math.hypot(x - d.ex, y - d.ey) > GROMM.digMaxDist) continue;
+        if (this.canExit(map, x, y, player)) return { x, y };
+      }
+    }
+    return null;
+  }
+
+  finishDig(map) {
+    const resume = this.dig.resume;
+    this.dig = null;
+    this.digCooldown = GROMM.digCooldown;
+    this.wanderDigTimer = GROMM.wanderDigMin + Math.random() * (GROMM.wanderDigMax - GROMM.wanderDigMin);
+    this.anim = 'idle';
+    if (this.onDig) this.onDig('done', { x: this.x, y: this.y });
+    if (resume.state === 'wander') {
+      this.rest(0.4);
+      return;
+    }
+    // hedefine devam et (kovalıyorsa son görülen yere)
+    const target = this.lastSeen || null;
+    this.setState('search');
+    if (!target || !this.goTo(map, target.x, target.y)) this.lookAround();
+  }
+
   startChase(player) {
     const was = this.state;
     this.checkedElevator = false;
@@ -551,6 +923,7 @@ export class Gromm {
   }
 
   draw(ctx, camX, camY) {
+    if (this.underground) return;
     const sh = SHEETS && SHEETS[this.anim];
     const { a, f } = this.currentFrame();
     const x = Math.round(this.x - camX), y = Math.round(this.y - camY);
@@ -569,6 +942,7 @@ export class Gromm {
 
   /** Gözler (ışık hesabından sonra): parlak kırmızı ve hafif hale. */
   drawEyes(ctx, camX, camY, t) {
+    if (this.underground) return;
     const sh = SHEETS && SHEETS[this.anim];
     if (!sh) return;
     const { a, f } = this.currentFrame();

@@ -105,6 +105,7 @@ function out(gain, pan = 0, wet = 0) {
     p.pan.value = Math.max(-1, Math.min(1, pan));
     g.connect(p);
     node = p;
+    g.__pan = p;
   }
   node.connect(master);
   if (wet > 0) {
@@ -860,4 +861,131 @@ export function playLeverPull() {
   src.connect(bp).connect(g).connect(out(1, 0, 0.3));
   src.start(t, rand(0, 1.5));
   src.stop(t + 0.18);
+}
+
+// ---------------- Gromm'un kazması ----------------
+
+/** Duvara dalış: kaya kazıma ve çatırtı. */
+export function playDigScrape(dist = 0, pan = 0) {
+  if (!live()) return;
+  const near = Math.max(0.12, 1 - dist / 800);
+  const t = ctx.currentTime;
+  for (let k = 0; k < 4; k++) {
+    const st = t + k * 0.2 + rand(0, 0.05);
+    const src = noiseSource(rand(0.5, 0.8));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = rand(300, 700);
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.4 * near, st + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + 0.22);
+    src.connect(bp).connect(g).connect(out(1, pan, 0.5));
+    src.start(st, rand(0, 1.5));
+    src.stop(st + 0.25);
+  }
+  playThud(dist * 0.8, pan);
+}
+
+/**
+ * Yerin altından gelen sürekli gümbürtü. Dönen nesne her karede
+ * set(ses 0..1, pan, parlaklık 0..1) ile güncellenir, stop() ile susar.
+ */
+export function startDigRumble() {
+  if (!ctx) return { set() {}, stop() {} };
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  src.playbackRate.value = 0.35;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 120;
+  lp.Q.value = 1.5;
+  const o = ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.value = 38;
+  const og = ctx.createGain();
+  og.gain.value = 0.5;
+  // titreşim: gümbürtü sabit kalmasın
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 5.5;
+  const lfoG = ctx.createGain();
+  lfoG.gain.value = 0.35;
+  const g = ctx.createGain();
+  g.gain.value = 0.0001;
+  lfo.connect(lfoG).connect(g.gain);
+  const bus = out(1, 0, 0.35);
+  src.connect(lp).connect(g);
+  o.connect(og).connect(g);
+  g.connect(bus);
+  src.start(t, rand(0, 1.5));
+  o.start(t);
+  lfo.start(t);
+  let stopped = false;
+  return {
+    set(vol, pan = 0, bright = 0) {
+      if (stopped || !ctx) return;
+      const now = ctx.currentTime;
+      g.gain.setTargetAtTime(Math.max(0.0001, vol * 0.9), now, 0.08);
+      lp.frequency.setTargetAtTime(90 + 500 * bright, now, 0.1);
+      if (bus.__pan) bus.__pan.pan.setTargetAtTime(pan, now, 0.1);
+    },
+    stop() {
+      if (stopped || !ctx) return;
+      stopped = true;
+      const now = ctx.currentTime;
+      g.gain.setTargetAtTime(0.0001, now, 0.15);
+      src.stop(now + 0.8);
+      o.stop(now + 0.8);
+      lfo.stop(now + 0.8);
+    },
+  };
+}
+
+/** Patlayarak çıkış: kaya patlaması, yağan taşlar. */
+export function playRockBurst(dist = 0, pan = 0) {
+  if (!live()) return;
+  const near = Math.max(0.15, 1 - dist / 900);
+  const t = ctx.currentTime;
+  const src = noiseSource(0.5);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(2200 * near + 300, t);
+  lp.frequency.exponentialRampToValueAtTime(150, t + 1.2);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.9 * near, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+  src.connect(lp).connect(g).connect(out(1, pan, 0.8));
+  src.start(t, rand(0, 0.5));
+  src.stop(t + 1.4);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(70, t);
+  o.frequency.exponentialRampToValueAtTime(25, t + 0.6);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.exponentialRampToValueAtTime(0.9 * near, t + 0.01);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+  o.connect(og).connect(out(1, pan, 0.4));
+  o.start(t);
+  o.stop(t + 0.85);
+  // ardından dökülen taşlar
+  for (let k = 0; k < 7; k++) {
+    const st = t + 0.15 + k * rand(0.06, 0.14);
+    const s2 = noiseSource(rand(0.8, 1.4));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = rand(800, 2200);
+    bp.Q.value = 3;
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.0001, st);
+    g2.gain.exponentialRampToValueAtTime(0.18 * near, st + 0.004);
+    g2.gain.exponentialRampToValueAtTime(0.0001, st + 0.07);
+    s2.connect(bp).connect(g2).connect(out(1, pan + rand(-0.2, 0.2), 0.5));
+    s2.start(st, rand(0, 1.5));
+    s2.stop(st + 0.08);
+  }
 }

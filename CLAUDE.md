@@ -135,7 +135,7 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 - **Hantallık:** Keskin dönüşlerde yavaşlar, köşelerde savrulur.
 - **Yakalama:** Sadece sprite'lar değdiğinde değil, gerçekten yakaladığında (ayaklar arası ~14 px) öldürür.
 - Değerler `src/gromm.js` içindeki `GROMM` nesnesinde.
-- **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar (bkz. Gromm'un kazması).
+- **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar (bkz. Gromm'un kazması aşağıda).
 
 ### Özellik havuzu
 Havuzda **4 özellik** var: duyma, görme, koklama, hafıza. Sıra her yeni oyunda karıştırılır. 2, 3, 4 ve 5. bölümlerde birer özellik eklenir (eskiler kalır); 6. bölümde (final) dördü de aktiftir. Özellikler Gromm'u hızlandırmaz, **madenciyi bulmasını kolaylaştırır**.
@@ -154,6 +154,20 @@ Uygulama ayrıntıları (`src/gromm.js`, `src/abilities.js`):
 - **Koklama:** İz ~25 sn kalır (güçlü izde 2 kat süre ve menzil). Bir kovalamayı bıraktıktan sonra birkaç saniye koku almaz. ~5 tile içindeki izin en taze noktasına gider (iz koklarken yavaş yürür).
 - **Hafıza:** Son 3 görülme yerini hatırlar. Kaybedince son görüldüğü yere, sonra asansörün çevresine bakar; dolaşırken ~35 sn'de bir sırayla asansörü ve bu yerleri kontrol eder.
 - Test için: `?abilities=duyma,gorme` (her bölümde bu özellikler), `?level=3` (3. bölümden başla).
+
+### Gromm'un kazması (her bölümde)
+Gromm'un imza hareketi. Gerilimli ama **adil**: oyuncu her zaman uyarı alır ve kaçma şansı olur. (`src/gromm.js` > kazma, efektler `src/scenes/play.js` > Gromm'un kazması)
+- **Ne zaman:** Dolaşırken 20-30 sn'de bir, yakındaki bir duvarın öbür tarafındaki başka bir bölgeye geçmek için (yürüyerek gitmek zaten kısaysa kazmaz). Bir hedefe giderken (kovalama, ses, iz, son görülen yer) duvarın içinden giden yol yürüme yolunun yarısından kısaysa. İki kazma arası en az 15 sn. Duvarın içinden en fazla ~10 tile.
+- **Çıkış:** Her zaman yürünebilir zemin (ve yürüyerek ulaşılabilir). Asansörün çevresine (3 tile) ve madencinin 3 tile yakınına çıkamaz. Uyarı bittiğinde madenci çıkış yerine gelmişse Gromm üstüne çıkmaz, yeraltında başka bir yere geçer.
+- **Aşamalar:**
+  1. Dalış (~1 sn): duvara döner, kazar (stomp animasyonu), taş ve toz saçılır, kazma sesi; içine dalınca girişte çatlak bir oyuk kalır.
+  2. Yeraltı: görünmez; ilerleyen bir çatlak çizgisi ve kabaran toprak, toz ve zıplayan taşlar, konuma göre (stereo + uzaklık) sürekli gümbürtü, yakınsa ekran titrer. Karanlık bölgede çatlak görünmez, sadece ses ve titreşim. Yeraltında yakalayamaz; hızı yürüyüşüne yakın.
+  3. Çıkış uyarısı (~1.15 sn): zemin kabarır, çatlaklar yıldız gibi yayılır, taşlar titrer, gümbürtü yükselir.
+  4. Patlayarak çıkış: kaya parçaları, büyük toz bulutu, güçlü sarsıntı, kükreme; bir süre kalan krater.
+  5. Toparlanma (~1 sn): sersemler, silkelenir; bu sırada yakalayamaz.
+- Yeraltında görme hariç özellikler çalışır: duyma ve koklama çıkış yerini belirler (yeraltındayken duyduğu sese/tazelenen ize yönelir), hafıza son görüldüğü yerin yakınını tercih eder.
+- Harita ve yollar değişmez. Oyuk ve kraterler solup kaybolur. Minimap kazmayı göstermez.
+- Test: `?digdebug` (kazma yolu, çıkış noktası, bekleme süreleri), `?digsoon` (birkaç saniyede bir kazar).
 
 ### Ağırlık hissi ("güm güm")
 Gromm çok ağır bir yaratık. Oyuncu onu görmeden önce **duymalı ve hissetmeli.**
@@ -257,7 +271,7 @@ Kurallar:
 4. Karanlık, fener konisi ve meşaleler.
 5. Cevher kazma, taşıma ve yavaşlama. Asansör ve sayaç.
 6. Gromm: dolaşma, yakına gelince kovalama, yakalama ve bölümü baştan başlatma.
-7. Gromm'un kazma hareketi (çatlaklar, çıkış efekti).
+7. Gromm'un kazma hareketi (çatlaklar, çıkış uyarısı ve efekti).
 8. Arayüz: açlık, sıcaklık ve dayanıklılık barları, cevher sayacı, sprint ve taş butonları.
 9. Açlık/soğuk, erzak sandıkları, meşalede ısınma.
 10. Sprint ve ses sistemi.

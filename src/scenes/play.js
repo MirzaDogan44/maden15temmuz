@@ -13,7 +13,7 @@ import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
 import { bakeMap, drawRubble } from '../mapRender.js';
 import { Ore } from '../ore.js';
-import { Gromm, GROMM } from '../gromm.js';
+import { Gromm, GROMM, DIG_DEBUG } from '../gromm.js';
 import { drawJumpscare, JUMPSCARE } from '../jumpscare.js';
 import * as settings from '../settings.js';
 import { images, FX } from '../assets.js';
@@ -196,6 +196,10 @@ export class PlayScene {
     };
     /** Gromm'un bıraktığı, zamanla kaybolan çatlak ve pençe izleri */
     this.decals = [];
+    /** Kazma izleri: oyuk, yeraltı çatlağı, kabarma, krater */
+    this.digMarks = [];
+    this.digRumble = null;
+    this.gromm.onDig = (ev, d) => this.onGrommDig(ev, d);
     this.heartTimer = 0;
     this.handTorch = { x: 0, y: 0, ...HAND_TORCH, intensity: 0, ...flickerState() };
     this.selfGlow = { x: 0, y: 0, ...SELF_GLOW };
@@ -410,6 +414,7 @@ export class PlayScene {
       restartAt: scare ? JUMPSCARE.end + 1.5 : 2.2,
     };
     this.player.setDead();
+    this.stopDigRumble();
     this.gromm.attack(this.player);
     this.pending = null;
     this.marker = null;
@@ -469,12 +474,14 @@ export class PlayScene {
       hidden: this.playerHidden,
       trail: this.trail,
       elevator: { x: (el.x0 + el.x1) / 2, y: el.y1 + 48 },
+      elevatorBox: el,
       time: this.t,
     };
     g.update(dt, this.map, p);
     this.newNoises = [];
+    this.updateDigFx(dt);
     const d = Math.hypot(g.x - p.x, g.y - p.y);
-    if (d < GROMM.catchRange && !p.dead) {
+    if (d < GROMM.catchRange && !p.dead && !g.dig) {
       this.onCaught();
       return;
     }
@@ -488,6 +495,217 @@ export class PlayScene {
     }
     for (const dc of this.decals) dc.t += dt;
     this.decals = this.decals.filter((dc) => dc.t < 8);
+  }
+
+  // ---------------- Gromm'un kazması ----------------
+
+  stopDigRumble() {
+    if (this.digRumble) this.digRumble.stop();
+    this.digRumble = null;
+  }
+
+  /** Bir noktanın karanlık bölgede olup olmadığı (orada çatlak görünmez). */
+  isDarkAt(x, y) {
+    return this.lighting.darkAt(x, y) > 0.5;
+  }
+
+  onGrommDig(ev, d) {
+    const p = this.player;
+    const dist = Math.hypot(d.x - p.x, d.y - p.y);
+    const pan = panOf(d.x - p.x);
+    const near = Math.max(0, 1 - dist / 520);
+    const rock = [[96, 84, 76], [70, 60, 54], [128, 112, 98], [52, 44, 40]];
+    switch (ev) {
+      case 'dive':
+        audio.playDigScrape(dist, pan);
+        this.game.shake(0.5 + 2 * near, 0.4);
+        break;
+      case 'vanish':
+        this.digMarks.push({ kind: 'hole', x: d.x, y: d.y, t: 0, life: 14, seed: Math.random() * 1000 });
+        this.digMarks.push({ kind: 'crack', pts: [], t: 0, life: 9, active: true });
+        this.particles.spawnDebris(d.x, d.y, 14, rock, 1.2);
+        this.particles.spawnPuff(d.x, d.y, 10, 22);
+        this.game.shake(1 + 3 * near, 0.35);
+        audio.playThud(dist * 0.7, pan);
+        this.stopDigRumble();
+        this.digRumble = audio.startDigRumble();
+        this.digFxTimer = 0;
+        break;
+      case 'cancel':
+        this.digMarks = this.digMarks.filter((m) => m.kind !== 'bulge');
+        break;
+      case 'warn':
+        this.digMarks = this.digMarks.filter((m) => m.kind !== 'bulge');
+        this.digMarks.push({ kind: 'bulge', x: d.x, y: d.y, t: 0, life: GROMM.digWarn + 0.6, seed: Math.random() * 1000 });
+        break;
+      case 'emerge': {
+        this.stopDigRumble();
+        for (const m of this.digMarks) if (m.kind === 'crack') m.active = false;
+        this.digMarks = this.digMarks.filter((m) => m.kind !== 'bulge');
+        this.digMarks.push({ kind: 'crater', x: d.x, y: d.y, t: 0, life: 16, seed: Math.random() * 1000 });
+        this.particles.spawnDebris(d.x, d.y - 6, 34, rock, 2.2);
+        this.particles.spawnPuff(d.x, d.y, 22, 46);
+        for (let k = 0; k < 10; k++) {
+          const px = d.x + (Math.random() - 0.5) * 120, py = d.y + (Math.random() - 0.5) * 80;
+          if (!this.map.solidAt(px, py)) this.particles.spawnFalling(px, py);
+        }
+        this.game.shake(2 + 6 * near, 0.6);
+        audio.playRockBurst(dist, pan);
+        audio.playRoar();
+        break;
+      }
+    }
+  }
+
+  /** Yeraltındaki Gromm: çatlak çizgisi, toz, zıplayan taşlar, gümbürtü, sarsıntı. */
+  updateDigFx(dt) {
+    for (const m of this.digMarks) m.t += dt;
+    this.digMarks = this.digMarks.filter((m) => m.active || m.t < m.life);
+    const g = this.gromm, d = g.dig, p = this.player;
+    if (!d || (d.phase !== 'under' && d.phase !== 'warn')) return;
+    const dist = Math.hypot(g.x - p.x, g.y - p.y);
+    const near = Math.max(0, 1 - dist / 600);
+    const warn = d.phase === 'warn' ? d.t / GROMM.digWarn : 0;
+    if (this.digRumble) this.digRumble.set(0.12 + 0.75 * near * near + 0.3 * warn, panOf(g.x - p.x), near * 0.6 + warn * 0.4);
+    // yakınsa ekran titrer
+    const amt = 1.6 * Math.pow(near, 1.5) + warn * 2.5 * near;
+    if (amt > 0.15) this.game.shake(amt, 0.1);
+    const dark = this.isDarkAt(g.x, g.y);
+    if (d.phase === 'under') {
+      const crack = this.digMarks.find((m) => m.kind === 'crack' && m.active);
+      if (crack) {
+        const last = crack.pts[crack.pts.length - 1];
+        if (!last || Math.hypot(last.x - g.x, last.y - g.y) > 5) {
+          crack.pts.push({ x: g.x + (Math.random() - 0.5) * 5, y: g.y + (Math.random() - 0.5) * 5, t: crack.t, dark });
+          if (crack.pts.length > 120) crack.pts.shift();
+        }
+      }
+    }
+    // toz ve zıplayan taşlar (karanlık bölgede görünmez)
+    this.digFxTimer = (this.digFxTimer || 0) - dt;
+    if (!dark && this.digFxTimer <= 0) {
+      this.digFxTimer = d.phase === 'warn' ? 0.08 : 0.22;
+      const tx = d.phase === 'warn' ? d.tx : g.x, ty = d.phase === 'warn' ? d.ty : g.y;
+      const onScreen = Math.abs(tx - p.x) < 400 && Math.abs(ty - p.y) < 300;
+      if (onScreen) {
+        this.particles.spawnPuff(tx + (Math.random() - 0.5) * 16, ty, d.phase === 'warn' ? 3 : 2, 10);
+        this.particles.spawnDebris(tx, ty, d.phase === 'warn' ? 3 : 1, [[110, 96, 84], [80, 70, 62]], 0.5);
+      }
+    }
+  }
+
+  /** ?digdebug: kazma yolu ve çıkış noktası. */
+  drawDigDebug(ctx, camX, camY) {
+    const g = this.gromm, d = g.dig;
+    const txt = d ? `KAZMA: ${d.phase} ${d.t.toFixed(1)}` : `kazma bekleme ${Math.max(0, g.digCooldown).toFixed(0)} / dolaşma ${Math.max(0, g.wanderDigTimer).toFixed(0)}`;
+    drawText(ctx, txt, 4, this.scene.height - 38, { color: '#ff0', shadow: '#000' });
+    if (!d) return;
+    ctx.strokeStyle = '#ff0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(d.ex - camX, d.ey - camY);
+    ctx.lineTo(d.tx - camX, d.ty - camY);
+    ctx.stroke();
+    ctx.strokeStyle = '#f40';
+    ctx.strokeRect(d.tx - camX - 8, d.ty - camY - 8, 16, 16);
+    ctx.fillStyle = '#0ff';
+    ctx.fillRect(g.x - camX - 2, g.y - camY - 2, 4, 4);
+  }
+
+  /** Kazma izleri (ışıktan önce, tavan katmanından sonra çizilir). */
+  drawDigMarks(sc, camX, camY, lit = false) {
+    for (const m of this.digMarks) {
+      // oyuk ve krater ışıkla birlikte çizilir; çatlak ve kabarma uyarı olduğu
+      // için ışıktan sonra (kayanın karanlık içinde de seçilsin diye)
+      const post = m.kind === 'crack' || m.kind === 'bulge';
+      if (post !== lit) continue;
+      const fade = m.active ? 1 : Math.min(1, (m.life - m.t) / 3);
+      if (fade <= 0) continue;
+      if (m.kind === 'crack') {
+        // ilerleyen çatlak çizgisi ve iki yanında kabaran toprak
+        const pts = m.pts;
+        for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1], b = pts[i];
+          if (b.dark || a.dark) continue;
+          const age = m.t - b.t;
+          const al = fade * Math.max(0.2, 1 - age / 9) * 0.8;
+          const x0 = Math.round(a.x - camX), y0 = Math.round(a.y - camY), x1 = Math.round(b.x - camX), y1 = Math.round(b.y - camY);
+          if (x1 < -10 || y1 < -10 || x1 > sc.canvas.width + 10 || y1 > sc.canvas.height + 10) continue;
+          sc.globalAlpha = al * 0.75;
+          sc.fillStyle = '#7a6452';
+          sc.fillRect(Math.min(x0, x1) - 2, Math.min(y0, y1) - 2, Math.abs(x1 - x0) + 1, 2);
+          sc.fillRect(Math.min(x0, x1) + 1, Math.max(y0, y1) + 2, Math.abs(x1 - x0) + 1, 1);
+          sc.globalAlpha = al;
+          sc.fillStyle = '#2a1e16';
+          const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+          for (let k = 0; k <= n; k++) sc.fillRect(Math.round(x0 + ((x1 - x0) * k) / n), Math.round(y0 + ((y1 - y0) * k) / n), 1, 1);
+        }
+        sc.globalAlpha = 1;
+        continue;
+      }
+      const x = Math.round(m.x - camX), y = Math.round(m.y - camY);
+      if (x < -40 || y < -40 || x > sc.canvas.width + 40 || y > sc.canvas.height + 40) continue;
+      let s = m.seed;
+      const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+      if (m.kind === 'hole' || m.kind === 'crater') {
+        const R = m.kind === 'crater' ? 16 : 10;
+        sc.globalAlpha = fade * 0.85;
+        // dış kenar: kabarmış toprak
+        sc.fillStyle = '#6a5646';
+        for (let dy = -R; dy <= R; dy++) for (let dx = -R - 3; dx <= R + 3; dx++) {
+          const q = (dx * dx) / ((R + 3) * (R + 3)) + (dy * dy) / (R * R * 0.45);
+          if (q <= 1 && q > 0.62 && ((dx + dy) & 1) === 0) sc.fillRect(x + dx, y + dy * 0.6, 1, 1);
+        }
+        // çukur
+        sc.fillStyle = '#080506';
+        for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+          if ((dx * dx) / (R * R) + (dy * dy) / (R * R * 0.3) <= 0.5) sc.fillRect(x + dx, y + Math.round(dy * 0.55), 1, 1);
+        }
+        // yıldız çatlaklar
+        sc.fillStyle = '#100a08';
+        for (let k = 0; k < (m.kind === 'crater' ? 8 : 5); k++) {
+          const a = rnd() * Math.PI * 2, len = R * (0.9 + rnd() * 0.9);
+          let px = x, py = y;
+          for (let i = 0; i < len; i++) {
+            px += Math.cos(a) + (rnd() - 0.5) * 0.8;
+            py += Math.sin(a) * 0.55 + (rnd() - 0.5) * 0.5;
+            sc.fillRect(Math.round(px), Math.round(py), 1, 1);
+          }
+        }
+        sc.globalAlpha = 1;
+      } else if (m.kind === 'bulge') {
+        // çıkış uyarısı: zemin kabarır, çatlaklar yıldız gibi yayılır, taşlar titrer
+        // (karanlık bölgede görünmez: orada uyarı sadece ses ve sarsıntı)
+        if (this.isDarkAt(m.x, m.y)) continue;
+        const k = Math.min(1, m.t / GROMM.digWarn);
+        sc.globalAlpha = 0.85;
+        const R = 6 + k * 12;
+        sc.fillStyle = '#7c6654';
+        for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+          const q = (dx * dx + dy * dy * 3) / (R * R);
+          if (q <= 1 && ((dx + dy) & 1) === 0) sc.fillRect(x + dx, y + dy, 1, 1);
+        }
+        sc.fillStyle = '#0c0806';
+        const rays = 7;
+        for (let r = 0; r < rays; r++) {
+          const a = (r / rays) * Math.PI * 2 + rnd() * 0.5, len = (8 + rnd() * 10) + k * 18;
+          let px = x, py = y;
+          for (let i = 0; i < len; i++) {
+            px += Math.cos(a) + (rnd() - 0.5) * 0.7;
+            py += Math.sin(a) * 0.55 + (rnd() - 0.5) * 0.4;
+            sc.fillRect(Math.round(px), Math.round(py), 1, 1);
+          }
+        }
+        // titreyen taşlar
+        sc.fillStyle = '#9a8676';
+        for (let i = 0; i < 6; i++) {
+          const a = rnd() * Math.PI * 2, rr = rnd() * R;
+          const jx = Math.round((Math.random() - 0.5) * 2 * k), jy = Math.round((Math.random() - 0.5) * 2 * k);
+          sc.fillRect(Math.round(x + Math.cos(a) * rr) + jx, Math.round(y + Math.sin(a) * rr * 0.6) + jy, 2, 2);
+        }
+        sc.globalAlpha = 1;
+      }
+    }
   }
 
   /** Gromm'un izleri (ışıktan önce çizilir). */
@@ -686,6 +904,7 @@ export class PlayScene {
   }
 
   ride() {
+    this.stopDigRumble();
     const el = this.elevator;
     this.ending = { t: 0 };
     this.player.stop();
@@ -949,6 +1168,7 @@ export class PlayScene {
     this.drawDecals(sc, camX, camY);
     this.drawEntities(sc, camX, camY);
     sc.drawImage(this.over, -camX, -camY);
+    this.drawDigMarks(sc, camX, camY);
 
     if (NO_LIGHT) {
       ctx.drawImage(this.scene, 0, 0);
@@ -1066,6 +1286,8 @@ export class PlayScene {
     ctx.globalAlpha = 1;
     this.particles.drawEffects(ctx, camX, camY, light, images.get(FX.sparks));
     this.gromm.drawEyes(ctx, camX, camY, this.t);
+    this.drawDigMarks(ctx, camX, camY, true);
+    if (DIG_DEBUG) this.drawDigDebug(ctx, camX, camY);
     for (const sw of this.switches) {
       if (!onScreen(sw.x, sw.y)) continue;
       const x = Math.round(sw.lx - camX), y = Math.round(sw.ly - camY);
