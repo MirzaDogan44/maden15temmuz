@@ -48,6 +48,15 @@ function bakedLevel(levelIndex, map) {
   return { ...b, ground };
 }
 
+/**
+ * Bölümün haritasını önceden çizip önbelleğe alır (açılış ekranı dururken
+ * çağrılır ki bölüm başlarken takılma olmasın).
+ */
+export function prepareLevel(levelIndex) {
+  if (bakeCache.has(levelIndex) || !LEVELS[levelIndex]) return;
+  bakeCache.set(levelIndex, bakeMap(new TileMap(LEVELS[levelIndex])));
+}
+
 export class PlayScene {
   constructor(game, levelIndex = 0) {
     this.game = game;
@@ -261,8 +270,17 @@ export class PlayScene {
     this.toasts.push({ text, t: 0, dur });
   }
 
+  /** Standdan meşale al; elinde meşale varken boş standa dokunursan geri bırakır. */
   takeTorch(st) {
-    if (!st.hasTorch) return;
+    if (!st.hasTorch) {
+      if (this.player.hasTorch) {
+        st.hasTorch = true;
+        this.player.hasTorch = false;
+        audio.playTorchPickup();
+        this.toast('Meşaleyi standa bıraktın.');
+      }
+      return;
+    }
     if (this.player.hasTorch) {
       this.toast('Elinde zaten bir meşale var.');
       return;

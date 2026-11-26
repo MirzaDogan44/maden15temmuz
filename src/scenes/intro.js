@@ -5,6 +5,7 @@
 import { drawText, wrapText, LINE_HEIGHT } from '../font.js';
 import { ABILITY_INFO, FIRST_LEVEL_INTRO } from '../abilities.js';
 import * as audio from '../audio.js';
+import { prepareLevel } from './play.js';
 
 const HOLD = 3.0; // yazının ekranda kalma süresi
 const FADE_OUT = 0.6;
@@ -28,6 +29,11 @@ export class IntroScene {
       audio.playRoar();
       audio.playStartRumble();
       this.game.shake(2, 0.6);
+    }
+    // yazı ekrandayken haritayı önceden çiz
+    if (!this.prepared && this.t > 0.6) {
+      this.prepared = true;
+      prepareLevel(this.levelIndex);
     }
     if (this.leaving > 0) {
       this.leaving += dt;

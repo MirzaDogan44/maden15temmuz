@@ -14,7 +14,12 @@ ES modülleri `file://` ile açılmaz, küçük bir sunucu gerekir:
 python3 -m http.server 8000
 ```
 
-Sonra http://localhost:8000 adresini aç. Adresin sonuna `?debug` eklersen FPS ve ölçek bilgisi görünür, `?nolight` ışığı kapatır (haritayı incelemek için).
+Sonra http://localhost:8000 adresini aç. Adres parametreleri:
+
+- `?debug`: FPS, ölçek ve Gromm'un durumu/özellikleri görünür
+- `?nolight`: ışığı kapatır (haritayı incelemek için)
+- `?level=3`: 3. bölümden başlar
+- `?abilities=duyma,gorme`: Gromm her bölümde bu özelliklerle başlar (duyma, gorme, koklama, hafiza, hiz)
 
 ## Klasörler
 
@@ -32,10 +37,12 @@ src/            oyun kodu
   jumpscare.js    yakalanınca ekranı kaplayan Gromm yüzü
   settings.js     oyuncu ayarları (jumpscare vb.)
   ui.js           butonlar ve ayarlar paneli
+  minimap.js      sol üstteki minimap
+  abilities.js    Gromm'un özellik havuzu ve bölümlere dağıtımı
   lighting.js     ortam ışığı, lambalar, karanlık bölgeler, meşale, dithering
   particles.js    toz ve kıvılcımlar
   audio.js        Web Audio ile kodla üretilen sesler
-  scenes/         başlangıç, oyun ve bölüm sonu ekranları
+  scenes/         başlangıç, bölüm açılışı, oyun, bölüm sonu ve final ekranları
 assets/
   madenci/      Minerman Adventure (tumas81)
   gromm/        Top-Down Boss Enemy (10KStudios)

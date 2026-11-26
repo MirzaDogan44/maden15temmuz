@@ -25,7 +25,7 @@ export const GROMM = {
   /** Dolaşırken: madencinin yürüyüşünden yavaş */
   wanderSpeed: MINER_SPEED * 0.75,
   /** Kovalarken: madencinin yürüyüşünden biraz hızlı, sprintten belirgin yavaş */
-  chaseSpeed: MINER_SPEED * 1.1,
+  chaseSpeed: MINER_SPEED * 1.06,
   /** İleri/geri ivme (px/sn²) */
   accel: 240,
   /** Yana ivme (px/sn²): düşük olduğu için köşelerde savrulur */
@@ -45,23 +45,25 @@ export const GROMM = {
 
   // --- Özellikler ---
   /** Her bölümde biraz hızlanır (bölüm başına) */
-  levelSpeedup: 0.035,
+  levelSpeedup: 0.015,
   /** Hız özelliği: hız çarpanı */
   speedAbility: 1.25,
   /** Hiçbir durumda geçemeyeceği hız: madencinin sprint hızının %90'ı */
   maxSpeed: MINER_SPEED * SPRINT_MULT * 0.9,
   /** Görme: elinde meşale olan madenciyi bu uzaklıktan görür */
-  torchSight: 13 * TILE,
+  torchSight: 11 * TILE,
   /** Görme: lamba ışığında duran madenciyi bu uzaklıktan görür */
-  lightSight: 9 * TILE,
+  lightSight: 8 * TILE,
   /** Görme: madencinin bulunduğu yerdeki ışık bu değerin üstündeyse 'ışıkta' sayılır */
   litThreshold: 0.55,
   /** Koklama: bu mesafedeki izi alır */
-  smellRange: 6 * TILE,
+  smellRange: 5 * TILE,
   /** Koklama: bu kadar eski iz artık kokmaz (sn) */
-  trailLife: 40,
+  trailLife: 25,
+  /** Koklama: bir kovalamayı bıraktıktan sonra bu kadar süre koku almaz (sn) */
+  smellCooldown: 6,
   /** Hafıza: dolaşırken asansörü kontrol etme aralığı (sn) */
-  patrolEvery: 30,
+  patrolEvery: 40,
 };
 
 // --- Boyama ---
@@ -378,7 +380,8 @@ export class Gromm {
 
     // Hareket: hedef hız; keskin dönüşte yavaşlar
     const st = this.state;
-    const maxV = st === 'chase' ? this.chaseSpeed : st === 'search' || st === 'track' || st === 'patrol' ? (this.chaseSpeed + this.wanderSpeed) / 2 : this.wanderSpeed;
+    // kovalarken en hızlı; sese/son görülen yere giderken orta; iz koklarken yavaş
+    const maxV = st === 'chase' ? this.chaseSpeed : st === 'search' || st === 'patrol' ? (this.chaseSpeed + this.wanderSpeed) / 2 : st === 'track' ? this.wanderSpeed * 1.05 : this.wanderSpeed;
     let dvx = 0, dvy = 0;
     if (this.path.length) {
       const p = this.path[0];
@@ -485,7 +488,9 @@ export class Gromm {
 
   /** Son görülen yerde durup 2-3 sn etrafına bakın, sonra dolaşmaya dön. */
   lookAround() {
+    const wasChasing = this.state === 'chase' || this.state === 'search';
     this.setState('look');
+    if (wasChasing) this.smellTimer = GROMM.smellCooldown;
     this.lookFor = GROMM.lookTime + Math.random() * 0.8;
     this.lookStep = -1;
     this.path = [];

@@ -90,7 +90,7 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Madenin çoğu duvar lambaları ve meşalelerle **loş ama görülebilir**. Oyuncu yolları, cevherleri ve çevreyi görebilir.
 - Haritada belirli **karanlık bölgeler** var (en derin tüneller, değerli cevherlerin olduğu odalar). Buralar zifiri karanlıktır.
 - Karanlık bölgelerin girişi belli olur: söndürülmüş lambalar, uyarı tabelası ve karanlığa doğru kararan bir geçiş.
-- Girişte bir **meşale standı** vardır. Standa tıklayan madenci meşaleyi eline alır. Elinde meşale varken etrafında titreyen, sıcak bir ışık dairesi olur; karanlık bölgede ancak o kadarını görür.
+- Girişte bir **meşale standı** vardır. Standa tıklayan madenci meşaleyi eline alır. Elinde meşale varken **boş bir standa** dokunursa meşaleyi geri bırakır (görme özelliği olan Gromm'dan saklanmak için). Elinde meşale varken etrafında titreyen, sıcak bir ışık dairesi olur; karanlık bölgede ancak o kadarını görür.
 - Meşalesiz karanlık bölgeye giren madenci neredeyse hiçbir şey göremez.
 - Meşalenin ışığı Gromm'un **görme** özelliğiyle bağlantılıdır (ışık taşıyan madenci uzaktan fark edilir).
 
@@ -123,7 +123,7 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 - **Kovalama ve vazgeçme:**
   - Görüş kesilince madencinin **en son görüldüğü yere** gider; orada bulamazsa **2-3 saniye etrafına bakınır**, sonra dolaşmaya döner.
   - Madenci yaklaşık **8 tile** uzaklaşırsa kovalamayı bırakır.
-- **Hız dengesi:** Dolaşırken madencinin yürüyüşünden yavaş (%75); kovalarken yürüyüşünden biraz hızlı (%110) ama **sprintten belirgin şekilde yavaş**. Sprint ve döngüleri doğru kullanan oyuncu kaçabilmeli, dikkatsiz oyuncu yakalanmalı.
+- **Hız dengesi:** Dolaşırken madencinin yürüyüşünden yavaş (%75); kovalarken yürüyüşünden biraz hızlı (%106) ama **sprintten belirgin şekilde yavaş**. Sprint ve döngüleri doğru kullanan oyuncu kaçabilmeli, dikkatsiz oyuncu yakalanmalı.
 - **Yakalama:** Sadece sprite'lar değdiğinde değil, gerçekten yakaladığında (ayaklar arası ~14 px) öldürür.
 - Değerler `src/gromm.js` içindeki `GROMM` nesnesinde.
 - **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar.
@@ -147,10 +147,10 @@ Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözl
 Uygulama ayrıntıları (`src/gromm.js`, `src/abilities.js`):
 - Sıra oyun başında karıştırılır ve oyun boyunca sabittir; ölüp bölümü tekrar oynamak sırayı değiştirmez.
 - **Duyma:** Ses olaylarının yarıçapı içindeyse sesin geldiği yere gider (yürüme 70 < kazma 170 < taş 230 < koşu 280 < şalter 560 px).
-- **Görme:** Elinde meşale olan madenciyi ~13 tile'dan, lamba ışığında duranı ~9 tile'dan görür (görüş hattı yine gerekir).
-- **Koklama:** Madencinin geçtiği yerde görünmez bir iz kalır (~40 sn). Gromm ~6 tile içindeki izin en taze noktasına gider, oradan daha tazesine geçerek madenciyi bulur.
-- **Hafıza:** Kaybettiği madencinin en son görüldüğü yere bakar, sonra asansörün çevresini kontrol eder; dolaşırken de ~30 sn'de bir asansöre uğrar.
-- **Hız:** %25 hızlanır. Her bölümde ayrıca %3.5 hızlanır. Kovalama hızı hiçbir durumda sprintin %90'ını geçmez.
+- **Görme:** Elinde meşale olan madenciyi ~11 tile'dan, lamba ışığında duranı ~8 tile'dan görür (görüş hattı yine gerekir).
+- **Koklama:** Madencinin geçtiği yerde görünmez bir iz kalır (~25 sn). Bir kovalamayı bıraktıktan sonra birkaç saniye koku almaz. Gromm ~5 tile içindeki izin en taze noktasına gider, oradan daha tazesine geçerek madenciyi bulur (iz koklarken yavaş yürür).
+- **Hafıza:** Kaybettiği madencinin en son görüldüğü yere bakar, sonra asansörün çevresini kontrol eder; dolaşırken de ~40 sn'de bir asansöre uğrar.
+- **Hız:** %25 hızlanır. Her bölümde ayrıca %1.5 hızlanır. Kovalama hızı hiçbir durumda sprintin %90'ını geçmez.
 - Test için: `?abilities=duyma,gorme` (her bölümde bu özellikler), `?level=3` (3. bölümden başla).
 
 ### Ağırlık hissi ("güm güm")
@@ -176,6 +176,17 @@ Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < 
 | 4 | 5 | 3 | + 1 rastgele özellik |
 | 5 | 6 | 4 | + 1 rastgele özellik |
 | 6 (final) | *sonra belirlenecek* | *sonra belirlenecek* | *sonra belirlenecek* |
+
+Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış döngüleri):
+- **1. Eski Maden** (72x52): asansör salonu KB'de, raylı kuzey galeri, adacıklı orta salon, tek girişli karanlık Derin Damar.
+- **2. Yarık** (76x52): ortada üç adacıklı uzun bir yarık, güneyde asansör salonu, köşelerde odalar, KD'de iki girişli karanlık oda.
+- **3. Kuyular** (72x56): ortada asansörlü merkez, halka koridor ve dört oda; GD'de iki girişli karanlık oda.
+- **4. Derin Galeriler** (72x60): üstte asansör, iki uzun dikey galeri ve üç yatay salon; sol alt galeri iki girişli karanlık tünel.
+- **5. Gromm'un İni** (80x58): kuzeyde asansör, üç adacıklı büyük orta salon, dört köşede birer şalter; KD ve GB'de iki girişli karanlık odalar.
+- Her haritada hedeften 1-2 fazla cevher var. Şalterler asansörden uzakta ve farklı yönlerde, en az biri karanlık bölgede.
+- **Şalter içeren karanlık bölgeler iki girişli olmalı:** şalter sesi Gromm'u çeker, tek girişli bir odada madenci kapana kısılır.
+- Bölüm bitince açılış ekranıyla sonraki bölüme geçilir; 5. bölümden sonra şimdilik "Final yakında" ekranı. Ölünce sadece o bölüm baştan başlar.
+- Test için `?level=3` ile istenen bölümden başlanabilir.
 
 ### Bölüm geçiş ekranları
 Oyun başlayınca ve her bölümün başında: siyah ekran, ortada büyük pixel yazı (sığmazsa satırlara bölünür), üstte küçük harflerle bölüm numarası ("BÖLÜM 2"), altında küçük bir ipucu, arkada derin bir kükreme/gümbürtü. Yazı ~3 saniye kalır, dokununca geçilebilir; sonra bölüm yavaşça aydınlanarak başlar. Ölünce açılış ekranı gösterilmez, bölüm doğrudan baştan başlar (`src/scenes/intro.js`).
@@ -257,5 +268,5 @@ Kurallar:
 
 ## Açık konular (sonra karar verilecek)
 - Final bölümünün tasarımı.
-- Meşalenin bir süre sonra sönmesi (yakıt) ya da yere bırakılabilmesi eklensin mi?
+- Meşalenin bir süre sonra sönmesi (yakıt) eklensin mi? (Şimdilik meşale sadece bir standa geri bırakılabiliyor; yere bırakma yok.)
 - Cevher türleri farklı olsun mu (ağır/değerli/gürültülü)?
