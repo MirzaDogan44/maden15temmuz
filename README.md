@@ -22,6 +22,7 @@ Sonra http://localhost:8000 adresini aç. Adres parametreleri:
 - `?abilities=duyma,gorme`: Gromm her bölümde bu özelliklerle başlar (duyma, gorme, koklama, hafiza)
 - `?digdebug`: Gromm'un kazma yolu ve çıkış noktası ekranda görünür
 - `?digsoon`: Gromm birkaç saniyede bir kazar
+- `?survival=fast`: açlık ve sıcaklık barları 5 kat hızlı azalır
 
 ## Klasörler
 

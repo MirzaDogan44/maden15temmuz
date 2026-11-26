@@ -30,7 +30,7 @@
 | Cevher kaz | Cevhere tıkla. Madenci yanına gider ve kazar. |
 | Asansöre yükle | Asansöre tıkla. Taşınan cevherler yüklenir. |
 | Şalter indir | Şaltere tıkla. |
-| Yemek ye | Erzak sandığına tıkla. |
+| Yemek ye | Yerdeki yemeğe (ekmek, et, konserve) tıkla. |
 | Meşale al | Yerdeki sönük meşaleye veya karanlık bölge girişindeki meşale standına tıkla. |
 | Meşaleyi söndür/yak | Sağ alttaki **meşale butonu** (sprintin solunda). |
 | Taş topla | Yerdeki taşa tıkla (en fazla 3). |
@@ -102,11 +102,14 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Gromm karanlık bölgelere girebilir; orada sadece kırmızı gözleri, güm sesleri ve ekran sarsıntısıyla anlaşılır.
 - 1. bölümde bir karanlık bölgenin girişinde bir kez: "Karanlıkta meşaleni söndür. Gromm seni göremez."
 
-### Açlık ve soğuk
-- **Açlık barı** zamanla düşer. Erzak sandıklarından yemek yiyerek doldurulur.
-- **Sıcaklık barı** zamanla düşer. Duvardaki **meşalelerin** yanında durunca dolar.
-- Bar sıfıra yaklaşınca madenci yavaşlar. Sıfırlanırsa ölür.
-- Gromm **görme** özelliğini aldıysa meşalenin ışığında durmak tehlikelidir. Gromm **koklama** özelliğini aldıysa yemek yemek iz bırakır.
+### Açlık ve soğuk (hafif bir baskı; asıl tehlike Gromm)
+- **Barlar:** Sol üstte, minimap'in hemen altında, aynı genişlikte iki küçük pixel art bar ve simgeleri. Açlık: ekmek simgesi, turuncu-kahverengi. Sıcaklık: alev/kar tanesi simgesi, ısındıkça turuncu, soğudukça buz mavisi. %25'in altında yavaşça yanıp söner. Dokunmayı engellemez.
+- **Açlık:** Dolu bardan sıfıra ~6 dk, koşarken biraz daha hızlı. Yerdeki yemeklere dokununca madenci gidip yer (ekmek +%35, et/konserve +%60), kısa yeme animasyonu ve sesi. Yemek yemek koklama özelliği için 15 sn güçlü iz bırakır. %15'in altında hafif yavaşlama ve ara sıra mide guruldaması. Sıfırsa bayılır (ölüm).
+- **Soğuk:** Sıfıra ~4 dk, karanlık bölgelerde biraz daha hızlı. Duvar meşalesi, lamba veya dolu stand yanında hızla ısınır (küçük sıcaklık parıltıları); elinde yanan meşale varken yavaşça ısınır.
+  - %50 altı: sprite'a hafif mavi ton. %25 altı: belirgin mavi, sprite titrer, nefesten buhar, ekran kenarlarından buz kristalleri büyür, ara sıra diş takırtısı. %10 altı: neredeyse buz rengi, hareket yavaşlar, ekran kenarları buzla kaplanır. Isınınca hepsi yumuşakça geri gider.
+  - Sıfırsa donar (ölüm).
+- **Yerdeki eşyalar** (`src/items.js`): bölüm başına 3-4 yemek (ekmek, et, konserve) ve 4-5 sönük meşale; bölümün tohumuyla her denemede aynı yerlerde, bir kısmı Gromm'un dolaştığı açık yerlerde. Karanlıkta hafifçe parlarlar. Cevher veya dinamit taşırken de alınabilir.
+- Değerler `src/config.js` içinde (HUNGER_*, COLD_*, WARM_*, FOOD). Test: `?survival=fast` barları 5 kat hızlı azaltır.
 
 ### Ölüm
 - Gromm yakalarsa veya açlık/soğuk sıfırlanırsa **bölüm baştan başlar.** Can sistemi yok.
