@@ -48,7 +48,7 @@ src/            oyun kodu
   lighting.js     ortam ışığı, lambalar, karanlık bölgeler, meşale, dithering
   particles.js    toz ve kıvılcımlar
   audio.js        Web Audio ile kodla üretilen sesler
-  scenes/         başlangıç, bölüm açılışı, oyun, bölüm sonu ve final ekranları
+  scenes/         başlangıç, ana menü, bölüm açılışı, oyun, bölüm sonu, ölüm ve bitiş ekranları
 assets/
   madenci/      Minerman Adventure (tumas81)
   gromm/        Top-Down Boss Enemy (10KStudios)
