@@ -24,7 +24,7 @@ const FEET = 57; // karede ayakların olduğu satır
 export const GROMM = {
   /** Dolaşırken: madencinin yürüyüşünden yavaş */
   wanderSpeed: MINER_SPEED * 0.75,
-  /** Kovalarken: madencinin yürüyüşünden biraz hızlı, sprintten belirgin yavaş */
+  /** Kovalarken (her zaman koşar): madencinin yürüyüşünden hızlı, sprintinden belirgin yavaş */
   chaseSpeed: MINER_SPEED * 1.06,
   /** İleri/geri ivme (px/sn²) */
   accel: 240,
@@ -32,9 +32,11 @@ export const GROMM = {
   turnAccel: 120,
   /** Keskin dönüşte (180°) hızın düşeceği oran */
   turnSlowdown: 0.55,
-  /** Bu mesafede ve görüş hattı açıksa madenciyi fark eder */
-  seeRange: 5.5 * TILE,
-  /** Kovalarken madenci bu mesafeden uzaklaşırsa bırakır */
+  /** Temel algı: bu mesafedeki madenciyi duvar arkasında bile fark eder (neredeyse kör ve sağır) */
+  feelRange: 2 * TILE,
+  /** Madenci karanlıkta ve meşalesi sönükken (saklanırken) fark etme mesafesi */
+  hiddenFeelRange: 1 * TILE,
+  /** Kovalarken görüş hattıyla izleyebildiği mesafe; daha uzaklaşan madenciyi bırakır */
   loseRange: 8 * TILE,
   /** Son görülen yerde etrafına bakınma süresi (sn) */
   lookTime: 2.5,
@@ -42,28 +44,24 @@ export const GROMM = {
   catchRange: 14,
   /** Ayak kutusu */
   box: [12, 7, 4],
-
-  // --- Özellikler ---
-  /** Her bölümde biraz hızlanır (bölüm başına) */
-  levelSpeedup: 0.015,
-  /** Hız özelliği: hız çarpanı */
-  speedAbility: 1.25,
   /** Hiçbir durumda geçemeyeceği hız: madencinin sprint hızının %90'ı */
   maxSpeed: MINER_SPEED * SPRINT_MULT * 0.9,
-  /** Görme: elinde meşale olan madenciyi bu uzaklıktan görür */
-  torchSight: 11 * TILE,
-  /** Görme: lamba ışığında duran madenciyi bu uzaklıktan görür */
-  lightSight: 8 * TILE,
-  /** Görme: madencinin bulunduğu yerdeki ışık bu değerin üstündeyse 'ışıkta' sayılır */
-  litThreshold: 0.55,
-  /** Koklama: bu mesafedeki izi alır */
+
+  // --- Özellikler (Gromm'u hızlandırmaz, madenciyi bulmasını kolaylaştırır) ---
+  /** Görme: görüş hattı varsa madenciyi bu uzaklıktan görür */
+  sight: 8 * TILE,
+  /** Görme: yanan meşaleyi bu uzaklıktan fark eder */
+  torchSight: 12 * TILE,
+  /** Koklama: bu mesafedeki izi alır (güçlü izde 2 katı) */
   smellRange: 5 * TILE,
-  /** Koklama: bu kadar eski iz artık kokmaz (sn) */
+  /** Koklama: bu kadar eski iz artık kokmaz (sn; güçlü izde 2 katı) */
   trailLife: 25,
   /** Koklama: bir kovalamayı bıraktıktan sonra bu kadar süre koku almaz (sn) */
   smellCooldown: 6,
-  /** Hafıza: dolaşırken asansörü kontrol etme aralığı (sn) */
-  patrolEvery: 40,
+  /** Hafıza: dolaşırken asansörü ve son görülen yerleri kontrol etme aralığı (sn) */
+  patrolEvery: 35,
+  /** Hafıza: hatırladığı son görülme yeri sayısı */
+  memorySize: 3,
 };
 
 // --- Boyama ---
@@ -154,7 +152,12 @@ export class Gromm {
     this.abilities = new Set();
     this.levelIndex = 0;
     /** Oyun sahnesinin her karede doldurduğu algı bilgisi */
-    this.senses = { noises: [], playerLight: 0, trail: [], elevator: null, time: 0 };
+    this.senses = { noises: [], hidden: false, torchLit: false, trail: [], elevator: null, time: 0 };
+    /** Hafıza: madencinin görüldüğü son yerler (en yenisi başta) */
+    this.memory = [];
+    this.patrolIndex = 0;
+    /** Final bölümü: öfkeli (biraz daha hızlı, madencinin yerini bilir) */
+    this.rage = false;
     this.smellTimer = 0;
     this.trackT = -1;
     this.checkedElevator = false;
@@ -162,7 +165,7 @@ export class Gromm {
     sheets();
   }
 
-  /** Bu bölümdeki özellikler: 'duyma' | 'gorme' | 'koklama' | 'hafiza' | 'hiz' */
+  /** Bu bölümdeki özellikler: 'duyma' | 'gorme' | 'koklama' | 'hafiza' */
   setAbilities(list, levelIndex = 0) {
     this.abilities = new Set(list);
     this.levelIndex = levelIndex;
@@ -172,27 +175,43 @@ export class Gromm {
     return this.abilities.has(a);
   }
 
-  /** Kovalama hızı: bölüme ve 'hız' özelliğine göre, ama sprintten hep yavaş. */
+  /** Kovalama hızı: yürüyüşten hızlı, sprintten hep yavaş (öfkeliyken biraz daha hızlı). */
   get chaseSpeed() {
-    let v = GROMM.chaseSpeed * (1 + GROMM.levelSpeedup * this.levelIndex);
-    if (this.has('hiz')) v *= GROMM.speedAbility;
-    return Math.min(v, GROMM.maxSpeed);
+    return Math.min(GROMM.chaseSpeed * (this.rage ? 1.15 : 1), GROMM.maxSpeed);
   }
 
   get wanderSpeed() {
-    let v = GROMM.wanderSpeed * (1 + GROMM.levelSpeedup * this.levelIndex);
-    if (this.has('hiz')) v *= GROMM.speedAbility;
-    return Math.min(v, this.chaseSpeed * 0.85);
+    return GROMM.wanderSpeed;
   }
 
-  /** Görüş menzili. Görme özelliğiyle ışık taşıyan/ışıkta duran madenci uzaktan görülür. */
-  sightRange(player, chasing) {
-    let r = chasing ? GROMM.loseRange : GROMM.seeRange;
-    if (this.has('gorme')) {
-      if (player.hasTorch) r = Math.max(r, GROMM.torchSight);
-      else if (this.senses.playerLight > GROMM.litThreshold) r = Math.max(r, GROMM.lightSight);
+  /**
+   * Madenciyi fark ediyor/görüyor mu?
+   * - Temel: çok yakındaysa (duvar arkasında bile) fark eder.
+   * - Görme özelliği ya da kovalama sırasında: görüş hattı varsa menzil içinde görür.
+   * - Karanlıkta meşalesi sönük madenci görülemez (sadece dibine gelirse fark edilir).
+   */
+  perceives(player, map, chasing) {
+    const d = Math.hypot(player.x - this.x, player.y - this.y);
+    const hidden = this.senses.hidden;
+    if (d <= (hidden ? GROMM.hiddenFeelRange : GROMM.feelRange)) return true;
+    if (hidden) return false;
+    let range = 0;
+    if (chasing) range = GROMM.loseRange;
+    if (this.has('gorme')) range = Math.max(range, this.senses.torchLit ? GROMM.torchSight : GROMM.sight);
+    if (d > range) return false;
+    return !map.rayBlocked(this.x, this.y - 10, player.x, player.y - 8);
+  }
+
+  /** Hafıza: görüldüğü yeri hatırla. */
+  remember(x, y) {
+    if (!this.has('hafiza')) return;
+    const m = this.memory;
+    if (m.length && Math.hypot(m[0].x - x, m[0].y - y) < 3 * TILE) {
+      m[0] = { x, y };
+      return;
     }
-    return r;
+    m.unshift({ x, y });
+    if (m.length > GROMM.memorySize) m.pop();
   }
 
   /** Duyma: yarıçapının içinde kaldığı en güçlü yeni sese yönel. */
@@ -221,8 +240,9 @@ export class Gromm {
     const now = this.senses.time;
     let best = null;
     for (const pt of this.senses.trail) {
-      if (pt.t <= this.trackT || now - pt.t > GROMM.trailLife) continue;
-      if (Math.hypot(pt.x - this.x, pt.y - this.y) > GROMM.smellRange) continue;
+      const k = pt.s || 1; // yemekten sonra iz 2 kat güçlü
+      if (pt.t <= this.trackT || now - pt.t > GROMM.trailLife * k) continue;
+      if (Math.hypot(pt.x - this.x, pt.y - this.y) > GROMM.smellRange * k) continue;
       if (!best || pt.t > best.t) best = pt;
     }
     return best;
@@ -242,13 +262,20 @@ export class Gromm {
   }
 
   /** Hafıza: asansörün çevresini kontrol etmeye git. */
-  patrol(map) {
-    const e = this.senses.elevator;
-    if (!this.has('hafiza') || !e) return false;
+  patrol(map, preferMemory = false) {
+    if (!this.has('hafiza')) return false;
+    // sırayla: asansörün çevresi ve madencinin görüldüğü son yerler
+    const spots = [];
+    if (this.senses.elevator) spots.push(this.senses.elevator);
+    spots.push(...this.memory);
+    if (!spots.length) return false;
+    let spot;
+    if (preferMemory && this.memory.length) spot = this.memory[0];
+    else spot = spots[this.patrolIndex++ % spots.length];
     this.setState('patrol');
     this.patrolTimer = GROMM.patrolEvery;
     this.checkedElevator = true;
-    return this.goTo(map, e.x, e.y);
+    return this.goTo(map, spot.x, spot.y);
   }
 
   get speed() {
@@ -260,15 +287,6 @@ export class Gromm {
     this.stateTime = 0;
   }
 
-  /**
-   * Madenciyi görüyor mu? Sadece görüş hattı açıksa (arada duvar yoksa) ve
-   * menzil içindeyse. Kovalarken menzil daha uzun (loseRange).
-   */
-  canSee(player, map, range = this.sightRange(player, false)) {
-    const d = Math.hypot(player.x - this.x, player.y - this.y);
-    if (d > range) return false;
-    return !map.rayBlocked(this.x, this.y - 10, player.x, player.y - 8);
-  }
 
   goTo(map, x, y) {
     const res = findPath(map, this.x, this.y, x, y, { box: GROMM.box, wallCost: 2.5 });
@@ -298,7 +316,7 @@ export class Gromm {
     // Sakin durumlar: önce gör, sonra duy, sonra kokla
     const calm = this.state !== 'chase' && this.state !== 'attack';
     if (calm && alive) {
-      if (this.canSee(player, map)) this.startChase(player);
+      if (this.perceives(player, map, false)) this.startChase(player);
       else if (this.hear(map)) { /* sese yöneldi */ }
       else if ((this.state === 'idle' || this.state === 'wander' || this.state === 'look') && this.smell(map, dt)) { /* ize düştü */ }
     }
@@ -319,13 +337,25 @@ export class Gromm {
         else if (this.patrolTimer <= 0) this.patrol(map);
         break;
       case 'chase': {
-        if (dist > this.sightRange(player, true)) {
+        if (this.rage) {
+          // Final: öfkeli, madencinin yerini her zaman bilir
+          this.lastSeen = { x: player.x, y: player.y };
+          this.repath -= dt;
+          if (this.repath <= 0) {
+            this.repath = 0.3;
+            this.goTo(map, player.x, player.y);
+          }
+          break;
+        }
+        const maxRange = this.has('gorme') && this.senses.torchLit ? GROMM.torchSight : GROMM.loseRange;
+        if (dist > maxRange && !this.senses.hidden) {
           // Yeterince uzaklaştı: bırak, etrafına bakın
           this.lookAround();
           break;
         }
-        if (alive && this.canSee(player, map, this.sightRange(player, true))) {
+        if (alive && this.perceives(player, map, true)) {
           this.lastSeen = { x: player.x, y: player.y };
+          this.remember(player.x, player.y);
           this.repath -= dt;
           if (this.repath <= 0) {
             this.repath = 0.3;

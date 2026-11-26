@@ -171,6 +171,8 @@ export class PlayScene {
     /** Koklama için madencinin görünmez izi: { x, y, t } */
     this.trail = [];
     this.trailTimer = 0;
+    /** Koklama: yemek yedikten sonra iz bu ana kadar güçlü */
+    this.scentBoostUntil = -1;
     /** Gromm'a bu karede iletilecek yeni sesler */
     this.newNoises = [];
     this.gromm.onSpot = () => {
@@ -358,6 +360,11 @@ export class PlayScene {
     if (c.t > c.restartAt) this.game.beginLevel(this.levelIndex);
   }
 
+  /** Madencinin elinde yanan bir meşale var mı? */
+  get torchLit() {
+    return this.player.hasTorch;
+  }
+
   /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
   get hideHud() {
     const c = this.caught;
@@ -372,15 +379,21 @@ export class PlayScene {
     if (this.trailTimer <= 0 && !p.dead) {
       this.trailTimer = 0.35;
       const last = this.trail[this.trail.length - 1];
-      if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 10) this.trail.push({ x: p.x, y: p.y, t: this.t });
-      else last.t = this.t;
-      while (this.trail.length && this.t - this.trail[0].t > 45) this.trail.shift();
+      const s = this.t < this.scentBoostUntil ? 2 : 1; // yemekten sonra iz güçlü
+      if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 10) this.trail.push({ x: p.x, y: p.y, t: this.t, s });
+      else {
+        last.t = this.t;
+        last.s = Math.max(last.s || 1, s);
+      }
+      while (this.trail.length && this.t - this.trail[0].t > 60) this.trail.shift();
     }
     // Algı bilgisi
     const el = this.elevator;
     g.senses = {
       noises: this.newNoises,
-      playerLight: NO_LIGHT ? 0 : this.lighting.sample(p.x, p.y - 8),
+      // karanlık bölgede meşalesi sönük madenci görülemez
+      torchLit: this.torchLit,
+      hidden: !this.torchLit && this.map.inDarkZone(p.x, p.y - 8),
       trail: this.trail,
       elevator: { x: (el.x0 + el.x1) / 2, y: el.y1 + 48 },
       time: this.t,

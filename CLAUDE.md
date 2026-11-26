@@ -118,39 +118,33 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 Dev bir yaratık. Madenciden kat kat büyük. Karanlıkta önce **parlayan gözleri** fark edilir.
 
 ### Temel davranış (her bölümde var)
-- **Dolaşma:** Madende rastgele dolaşır. Çok yakına gelirsen seni görür ve kovalar.
-- **Görüş:** Madenciyi sadece **görüş hattı varsa** (arada duvar yoksa) ve yaklaşık **5.5 tile** içindeyse fark eder.
-- **Kovalama ve vazgeçme:**
+- **Temel algı (1. bölüm, özelliksiz):** Neredeyse kör ve sağır. Madenciyi sadece **çok yakınındaysa (~2 tile)** fark eder; bu mesafede **arada duvar olsa bile** fark eder. Aksi halde rastgele dolaşır.
+- **Kovalama:** Fark edince **her zaman koşarak** kovalar. Kovalarken görüş hattı olan madenciyi ~8 tile'a kadar izleyebilir.
+- **Vazgeçme:**
   - Görüş kesilince madencinin **en son görüldüğü yere** gider; orada bulamazsa **2-3 saniye etrafına bakınır**, sonra dolaşmaya döner.
   - Madenci yaklaşık **8 tile** uzaklaşırsa kovalamayı bırakır.
-- **Hız dengesi:** Dolaşırken madencinin yürüyüşünden yavaş (%75); kovalarken yürüyüşünden biraz hızlı (%106) ama **sprintten belirgin şekilde yavaş**. Sprint ve döngüleri doğru kullanan oyuncu kaçabilmeli, dikkatsiz oyuncu yakalanmalı.
+- **Hız dengesi:** Dolaşırken madencinin yürüyüşünden yavaş (%75); kovalarken yürüyüşünden hızlı (%106) ama **sprintten belirgin şekilde yavaş**. Özellikler ve bölümler Gromm'u **hızlandırmaz** (sadece final kaçışında biraz hızlanır, yine de sprintin %90'ını geçmez).
+- **Hantallık:** Keskin dönüşlerde yavaşlar, köşelerde savrulur.
 - **Yakalama:** Sadece sprite'lar değdiğinde değil, gerçekten yakaladığında (ayaklar arası ~14 px) öldürür.
 - Değerler `src/gromm.js` içindeki `GROMM` nesnesinde.
-- **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar.
-  - Kayanın içindeyken üstte **çatlaklar ve sallanan taşlar** görünür. Dikkatli oyuncu nereden çıkacağını tahmin edebilir.
-  - Girişte ve çıkışta toz bulutu, taş parçaları ve ekran sarsıntısı olsun.
+- **Kazma:** Bir duvarın içine kazarak girer, kayanın içinden ilerler ve başka bir yerden patlayarak çıkar (bkz. Gromm'un kazması).
 
-### Rastgele özellik havuzu
-2. bölümden 5. bölüme kadar her bölümde Gromm havuzdan **rastgele bir özellik daha** kazanır. Eski özellikler kalır. Sıra her oyunda farklıdır.
+### Özellik havuzu
+Havuzda **4 özellik** var: duyma, görme, koklama, hafıza. Sıra her yeni oyunda karıştırılır. 2, 3, 4 ve 5. bölümlerde birer özellik eklenir (eskiler kalır); 6. bölümde (final) dördü de aktiftir. Özellikler Gromm'u hızlandırmaz, **madenciyi bulmasını kolaylaştırır**.
 
 | Özellik | Etkisi |
 |---|---|
-| Duyma | Kazma, koşu, şalter ve taş seslerinin geldiği yere gider. |
-| Görme | Meşalelerin ve lambaların ışığını uzaktan fark eder; elinde meşale olan madenciyi uzaktan görür. |
-| Koklama | Madencinin bıraktığı izi takip eder. Yemek yiyince iz güçlenir. |
-| Hafıza | Seni en son gördüğü yeri ve asansör yolunu kontrol eder. Taş numarasına iki kere kanmaz. |
-| Hız | Belirgin şekilde hızlanır. |
-
-- 5 özellikten 4'ü 2–5. bölümlerde gelir. Kalan 1 özellik final bölümünde kullanılabilir.
-- Ayrıca Gromm her bölümde **biraz** hızlanır, ama madencinin **koşu hızını asla geçmesin.**
+| Görme | Görüş hattı varsa madenciyi ~8 tile'dan görür. Yanan meşaleyi daha uzaktan (~12 tile) fark eder. Karanlık bölgede meşalesi sönük madenciyi göremez. |
+| Duyma | Seslerin geldiği yere gider. Yarıçaplar: yürüme < kazma < koşu < dinamit kurma < şalter. |
+| Koklama | Madencinin bıraktığı görünmez izi takip eder. Yemek yedikten sonra 15 sn iz 2 kat güçlüdür. |
+| Hafıza | Madenciyi en son gördüğü birkaç yeri ve asansör çevresini düzenli kontrol eder. |
 
 Uygulama ayrıntıları (`src/gromm.js`, `src/abilities.js`):
 - Sıra oyun başında karıştırılır ve oyun boyunca sabittir; ölüp bölümü tekrar oynamak sırayı değiştirmez.
-- **Duyma:** Ses olaylarının yarıçapı içindeyse sesin geldiği yere gider (yürüme 70 < kazma 170 < taş 230 < koşu 280 < şalter 560 px).
-- **Görme:** Elinde meşale olan madenciyi ~11 tile'dan, lamba ışığında duranı ~8 tile'dan görür (görüş hattı yine gerekir).
-- **Koklama:** Madencinin geçtiği yerde görünmez bir iz kalır (~25 sn). Bir kovalamayı bıraktıktan sonra birkaç saniye koku almaz. Gromm ~5 tile içindeki izin en taze noktasına gider, oradan daha tazesine geçerek madenciyi bulur (iz koklarken yavaş yürür).
-- **Hafıza:** Kaybettiği madencinin en son görüldüğü yere bakar, sonra asansörün çevresini kontrol eder; dolaşırken de ~40 sn'de bir asansöre uğrar.
-- **Hız:** %25 hızlanır. Her bölümde ayrıca %1.5 hızlanır. Kovalama hızı hiçbir durumda sprintin %90'ını geçmez.
+- **Duyma:** Ses olaylarının yarıçapı içindeyse sesin geldiği yere gider (yürüme 70 < kazma 170 < koşu 280 < dinamit 420 < şalter 560 px; `NOISE` in `src/config.js`).
+- **Görme:** Görüş hattıyla 8 tile, yanan meşaleli madenciyi 12 tile. Saklanan (karanlıkta, meşalesi sönük) madenciyi görmez.
+- **Koklama:** İz ~25 sn kalır (güçlü izde 2 kat süre ve menzil). Bir kovalamayı bıraktıktan sonra birkaç saniye koku almaz. ~5 tile içindeki izin en taze noktasına gider (iz koklarken yavaş yürür).
+- **Hafıza:** Son 3 görülme yerini hatırlar. Kaybedince son görüldüğü yere, sonra asansörün çevresine bakar; dolaşırken ~35 sn'de bir sırayla asansörü ve bu yerleri kontrol eder.
 - Test için: `?abilities=duyma,gorme` (her bölümde bu özellikler), `?level=3` (3. bölümden başla).
 
 ### Ağırlık hissi ("güm güm")
@@ -162,7 +156,7 @@ Gromm çok ağır bir yaratık. Oyuncu onu görmeden önce **duymalı ve hissetm
 - **Hareket:** Hızlı ama hantal. Ani dönemez, dururken ve kalkarken ivmesi hissedilir. Keskin dönüşlerde yavaşlar, köşelerde savrulur (yana ivmesi düşük). Oyuncu keskin dönüşlerle kaçabilmeli.
 
 ### Oyun içi ses yarıçapları (Gromm'un duyması için)
-Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < kazma < taş < koşu < şalter. Gromm duyma özelliğine sahipse yarıçapın içindeyse sese yönelir.
+Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < kazma < koşu < dinamit kurma < şalter. Gromm duyma özelliğine sahipse yarıçapın içindeyse sese yönelir.
 
 ---
 
@@ -197,7 +191,6 @@ Oyun başlayınca ve her bölümün başında: siyah ekran, ortada büyük pixel
   - Görme: "Gromm artık ışığı GÖREBİLİYOR." / İpucu: "Meşaleler seni ele verir."
   - Koklama: "Gromm artık seni KOKLAYABİLİYOR." / İpucu: "Yemek yemek iz bırakır."
   - Hafıza: "Gromm seni HATIRLIYOR." / İpucu: "Aynı numara iki kere işlemez."
-  - Hız: "Gromm artık daha HIZLI." / İpucu: "Kaçmak için koşman gerekebilir."
 
 ---
 
@@ -259,7 +252,7 @@ Kurallar:
 10. Sprint ve ses sistemi.
 11. Şalterler.
 12. Taş toplama ve atma.
-13. Rastgele özellik havuzu ve 5 özelliğin yapay zekası.
+13. Rastgele özellik havuzu ve 4 özelliğin yapay zekası.
 14. Bölüm geçiş ekranları ve 2–5. bölüm haritaları.
 15. Sesler ve son cilalar.
 16. Final bölümü (tasarımı sonra yapılacak).

@@ -41,10 +41,13 @@ export const STAMINA_RECOVER = 0.35;
 
 /**
  * Seslerin Gromm'a ulaştığı yarıçaplar (piksel). Küçükten büyüğe:
- * yürüme < kazma < taş < koşu < şalter. Gromm "duyma" özelliğini alınca
- * bu yarıçapın içindeyse sese yönelir.
+ * yürüme < kazma < koşu < dinamit kurma < şalter. Gromm "duyma" özelliğini
+ * alınca bu yarıçapın içindeyse sese yönelir.
  */
-export const NOISE = { walk: 70, dig: 170, stone: 230, run: 280, lever: 560 };
+export const NOISE = { walk: 70, dig: 170, stone: 230, run: 280, dynamite: 420, lever: 560 };
+
+/** Koklama: yemek yedikten sonra bu kadar saniye iz 2 kat güçlü kalır. */
+export const SCENT_BOOST_TIME = 15;
 
 /** Adres çubuğunda ?debug varsa FPS ve ölçek bilgisi gösterilir. */
 export const DEBUG = new URLSearchParams(location.search).has('debug');

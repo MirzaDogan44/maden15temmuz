@@ -1,14 +1,15 @@
 // Gromm'un rastgele özellik havuzu ve bölümlere dağıtımı.
 //
-// Oyun başında 5 özellik karıştırılır. 2-5. bölümlerde her bölüm sıradaki
-// özelliği ekler, eskiler kalır (5. özellik final bölümüne ayrılır).
+// Oyun başında 4 özellik karıştırılır. 2-5. bölümlerde her bölüm sıradaki
+// özelliği ekler, eskiler kalır; final (6.) bölümde dördü de vardır.
+// Özellikler Gromm'u hızlandırmaz, madenciyi bulmasını kolaylaştırır.
 // Oyuncu ölüp bölümü tekrar oynarsa sıra değişmez (sıra oyun boyunca saklanır).
 //
 // Test için adres çubuğu:
 //   ?abilities=duyma,gorme   -> her bölümde tam olarak bu özellikler
 //   ?level=3                  -> 3. bölümden başla
 
-export const ABILITY_IDS = ['duyma', 'gorme', 'koklama', 'hafiza', 'hiz'];
+export const ABILITY_IDS = ['duyma', 'gorme', 'koklama', 'hafiza'];
 
 /** Bölüm açılış ekranı yazıları (CLAUDE.md > Bölüm geçiş ekranları). */
 export const ABILITY_INFO = {
@@ -16,13 +17,12 @@ export const ABILITY_INFO = {
   gorme: { name: 'Görme', title: 'Gromm artık ışığı GÖREBİLİYOR.', hint: 'Meşaleler seni ele verir.' },
   koklama: { name: 'Koklama', title: 'Gromm artık seni KOKLAYABİLİYOR.', hint: 'Yemek yemek iz bırakır.' },
   hafiza: { name: 'Hafıza', title: 'Gromm seni HATIRLIYOR.', hint: 'Aynı numara iki kere işlemez.' },
-  hiz: { name: 'Hız', title: 'Gromm artık daha HIZLI.', hint: 'Kaçmak için koşman gerekebilir.' },
 };
 
 export const FIRST_LEVEL_INTRO = { title: 'GROMM HAREKET EDEBİLİR', hint: 'Cevherleri asansöre taşı. Yakalanma.' };
 
 // Türkçe karakterli yazımları da kabul et
-const ALIASES = { görme: 'gorme', hafıza: 'hafiza', hız: 'hiz', koku: 'koklama', ses: 'duyma' };
+const ALIASES = { görme: 'gorme', hafıza: 'hafiza', koku: 'koklama', ses: 'duyma' };
 
 function parseList(str) {
   return str

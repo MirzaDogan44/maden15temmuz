@@ -19,7 +19,7 @@ Sonra http://localhost:8000 adresini aç. Adres parametreleri:
 - `?debug`: FPS, ölçek ve Gromm'un durumu/özellikleri görünür
 - `?nolight`: ışığı kapatır (haritayı incelemek için)
 - `?level=3`: 3. bölümden başlar
-- `?abilities=duyma,gorme`: Gromm her bölümde bu özelliklerle başlar (duyma, gorme, koklama, hafiza, hiz)
+- `?abilities=duyma,gorme`: Gromm her bölümde bu özelliklerle başlar (duyma, gorme, koklama, hafiza)
 
 ## Klasörler
 
