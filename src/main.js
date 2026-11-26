@@ -58,6 +58,7 @@ class Game {
 
   /** Bu bölümde Gromm'un özellikleri. */
   abilities(levelIndex) {
+    if (!this.run) this.newRun();
     return abilitiesFor(this.run.order, levelIndex);
   }
 

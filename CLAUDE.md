@@ -216,7 +216,7 @@ Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış dön
 - **4. Derin Galeriler** (72x60): üstte asansör, iki uzun dikey galeri ve üç yatay salon; sol alt galeri iki girişli karanlık tünel.
 - **5. Gromm'un İni** (80x58): kuzeyde asansör, üç adacıklı büyük orta salon, dört köşede birer şalter; KD ve GB'de iki girişli karanlık odalar.
 - **6. Çöküş** (92x64, en büyük): güneyde asansör salonu, ortada üç adacıklı büyük salon, kuzeyde galeri, dört köşede birer oda ve patlatma noktası; KD ve GB'de iki girişli karanlık odalar. Harita karakteri `X` patlatma noktası (zemine bakan duvar yüzü).
-- Her haritada hedeften 1-2 fazla cevher var. Şalterler asansörden uzakta ve farklı yönlerde, en az biri karanlık bölgede.
+- Haritada hedefin ~2-2.5 katı cevher var (1. bölüm 8, 2-4. bölüm 12-13, 5. bölüm 14); bir kısmı 2-3'lük damarlar halinde. Asansöre yakın olanlar az (9 tile içinde yok), uzakta ve karanlık bölgelerde olanlar çok. Oyuncu cevher aramakla vakit kaybetmez; asıl gerilim onları Gromm'a yakalanmadan taşımak. Tek cevher taşıma kuralı aynen geçerli; finalde cevher yok. Şalterler asansörden uzakta ve farklı yönlerde, en az biri karanlık bölgede.
 - **Şalter içeren karanlık bölgeler iki girişli olmalı:** şalter sesi Gromm'u çeker, tek girişli bir odada madenci kapana kısılır.
 - Bölüm bitince açılış ekranıyla sonraki bölüme geçilir; 5. bölümden sonra final (6. bölüm).
 
