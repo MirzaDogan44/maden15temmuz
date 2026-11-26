@@ -857,6 +857,7 @@ export class Gromm {
           d.t = 0;
           this.anim = 'idle';
           this.animT = 0;
+          this.frame = 0;
         }
         break;
       case 'recover': {
@@ -939,7 +940,8 @@ export class Gromm {
 
   currentFrame() {
     const a = GROMM_SPRITES.anims[this.anim];
-    if (this.anim === 'walk' || this.anim === 'idle') return { a, f: this.frame };
+    // walk/idle karesi ayrı tutulur; animasyon değişince eski kare taşabilir, sınıra sar
+    if (this.anim === 'walk' || this.anim === 'idle') return { a, f: ((this.frame % a.frames) + a.frames) % a.frames };
     const f = Math.min(a.frames - 1, Math.floor(this.animT * a.fps));
     return { a, f };
   }
@@ -969,8 +971,8 @@ export class Gromm {
     if (!sh) return;
     const { a, f } = this.currentFrame();
     const row = a.rows[this.dir] ?? 0;
-    const pts = sh.eyes[row][f];
-    if (!pts.length) return;
+    const pts = sh.eyes[row] && sh.eyes[row][f];
+    if (!pts || !pts.length) return;
     const ox = Math.round(this.x - camX) - 32 * SCALE, oy = Math.round(this.y - camY) - FEET * SCALE;
     const pulse = 0.85 + Math.sin(t * 2.3) * 0.15;
     // hale (dithering'li)

@@ -190,15 +190,24 @@ class Game {
   startLoop() {
     let last = performance.now();
     let acc = 0;
+    let errors = 0;
     const frame = (now) => {
+      // Bir sonraki kareyi en başta iste: bu karede bir hata olsa bile oyun donmasın.
+      requestAnimationFrame(frame);
       const dt = Math.min(MAX_FRAME_TIME, (now - last) / 1000);
       last = now;
       acc += dt;
-      while (acc >= STEP) {
-        this.update(STEP);
-        acc -= STEP;
+      try {
+        while (acc >= STEP) {
+          this.update(STEP);
+          acc -= STEP;
+        }
+        this.render();
+      } catch (e) {
+        acc = 0;
+        // aynı hata her karede konsolu doldurmasın
+        if (errors++ < 5) console.error('Oyun karesinde hata:', e);
       }
-      this.render();
 
       this._fpsFrames++;
       this._fpsTime += dt;
@@ -208,7 +217,6 @@ class Game {
         this._fpsTime = 0;
         this.checkPerformance();
       }
-      requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   }
