@@ -1063,3 +1063,97 @@ export function playTeethChatter() {
     o.stop(st + 0.03);
   }
 }
+
+// ---------------- Final: dinamit ----------------
+
+/** Dinamit kurarken: ip/bant hışırtısı ve metal tık. */
+export function playArmTick() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(rand(0.7, 1.1));
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = rand(1800, 3200);
+  bp.Q.value = 1.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  src.connect(bp).connect(g).connect(out(1, 0, 0.2));
+  src.start(t, rand(0, 1.5));
+  src.stop(t + 0.2);
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.value = rand(900, 1300);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.0001, t + 0.12);
+  og.gain.exponentialRampToValueAtTime(0.06, t + 0.122);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  o.connect(og).connect(out(1, 0, 0.2));
+  o.start(t + 0.1);
+  o.stop(t + 0.18);
+}
+
+/** Fitil tutuşması: cızırtı. */
+export function playFuse(vol = 1, pan = 0) {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(1.6);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 3000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.18 * vol, t + 0.05);
+  g.gain.setValueAtTime(0.18 * vol, t + 0.5);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+  src.connect(hp).connect(g).connect(out(1, pan, 0.3));
+  src.start(t, rand(0, 1));
+  src.stop(t + 1);
+}
+
+/** Geri sayım tıkı (son saniyelerde daha tiz). */
+export function playCountdownTick(urgent = false) {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.value = urgent ? 1320 : 660;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(urgent ? 0.09 : 0.05, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.1);
+}
+
+/** Dev patlama: uzun, derin bir gümbürtü ve çöken kayalar. */
+export function playBigExplosion(muffled = false) {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const src = noiseSource(0.35);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(muffled ? 500 : 3000, t);
+  lp.frequency.exponentialRampToValueAtTime(80, t + 4);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(1.0, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
+  src.connect(lp).connect(g).connect(out(1, 0, 1));
+  src.start(t);
+  src.stop(t + 4.6);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(55, t);
+  o.frequency.exponentialRampToValueAtTime(18, t + 3);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.exponentialRampToValueAtTime(1.0, t + 0.02);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+  o.connect(og).connect(out(1, 0, 0.5));
+  o.start(t);
+  o.stop(t + 3.3);
+  for (let k = 0; k < 4; k++) playRockBurst(200 + k * 150, rand(-0.6, 0.6));
+}

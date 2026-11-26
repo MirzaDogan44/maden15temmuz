@@ -71,6 +71,20 @@ export class Minimap {
       ctx.fillRect(ex + 2, ey + 1, 1, 3);
       ctx.fillRect(ex + 1, ey + 2, 3, 1);
     }
+    // final: patlatma noktaları (dinamitler gösterilmez)
+    if (this.markers) {
+      for (const m of this.markers) {
+        const mx = x + 2 + m.tx, my = y + 2 + m.ty + 1;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(mx - 2, my - 2, 5, 5);
+        ctx.fillStyle = m.armed ? '#5ce87a' : '#ff3a2a';
+        ctx.fillRect(mx - 1, my - 1, 1, 1);
+        ctx.fillRect(mx + 1, my - 1, 1, 1);
+        ctx.fillRect(mx, my, 1, 1);
+        ctx.fillRect(mx - 1, my + 1, 1, 1);
+        ctx.fillRect(mx + 1, my + 1, 1, 1);
+      }
+    }
     // oyuncu: yanıp sönen nokta
     const px = x + 2 + Math.floor(player.x / TILE), py = y + 2 + Math.floor(player.y / TILE);
     const on = Math.floor(t * 3) % 2 === 0;

@@ -194,7 +194,7 @@ Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < 
 | 3 | 5 | 2 | + 1 rastgele özellik |
 | 4 | 5 | 3 | + 1 rastgele özellik |
 | 5 | 6 | 4 | + 1 rastgele özellik |
-| 6 (final) | *sonra belirlenecek* | *sonra belirlenecek* | *sonra belirlenecek* |
+| 6 (final) | - (4 dinamit) | - | Dört özellik de aktif |
 
 Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış döngüleri):
 - **1. Eski Maden** (72x52): asansör salonu KB'de, raylı kuzey galeri, adacıklı orta salon, tek girişli karanlık Derin Damar.
@@ -202,9 +202,22 @@ Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış dön
 - **3. Kuyular** (72x56): ortada asansörlü merkez, halka koridor ve dört oda; GD'de iki girişli karanlık oda.
 - **4. Derin Galeriler** (72x60): üstte asansör, iki uzun dikey galeri ve üç yatay salon; sol alt galeri iki girişli karanlık tünel.
 - **5. Gromm'un İni** (80x58): kuzeyde asansör, üç adacıklı büyük orta salon, dört köşede birer şalter; KD ve GB'de iki girişli karanlık odalar.
+- **6. Çöküş** (92x64, en büyük): güneyde asansör salonu, ortada üç adacıklı büyük salon, kuzeyde galeri, dört köşede birer oda ve patlatma noktası; KD ve GB'de iki girişli karanlık odalar. Harita karakteri `X` patlatma noktası (zemine bakan duvar yüzü).
 - Her haritada hedeften 1-2 fazla cevher var. Şalterler asansörden uzakta ve farklı yönlerde, en az biri karanlık bölgede.
 - **Şalter içeren karanlık bölgeler iki girişli olmalı:** şalter sesi Gromm'u çeker, tek girişli bir odada madenci kapana kısılır.
-- Bölüm bitince açılış ekranıyla sonraki bölüme geçilir; 5. bölümden sonra şimdilik "Final yakında" ekranı. Ölünce sadece o bölüm baştan başlar.
+- Bölüm bitince açılış ekranıyla sonraki bölüme geçilir; 5. bölümden sonra final (6. bölüm).
+
+### Final bölümü (6. bölüm)
+- Gromm'un dört özelliği de aktif. Cevher yok. Görev: haritaya dağılmış **dinamitleri** bulup işaretli **4 patlatma noktasına** kurmak.
+  - Dinamit görselleri: `assets/madenci/minerman-adventure/items/dynamite.png` (yerde ve sırtta) ve `dynamite-pack.png` (kurulmuş paket); değiştirilmeden çizilir.
+  - Patlatma noktası: duvarda çatlak, üstünde kırmızı X ve tahta destek. En az biri karanlık bölgede (karanlık bölgeler iki girişli).
+  - Madenci aynı anda 1 dinamit taşır (sırtında görünür). Dinamitler (patlatma noktası + 1 adet) bazen karanlık bölgelerde, bazen Gromm'un yolunda.
+  - Dinamit kurmak ~3 sn sürer (animasyon ve ses) ve ses çıkarır (duyma yarıçapı: dinamit). Başka yere dokunmak kurmayı yarıda keser.
+  - Üst ortada "Dinamit: 2/4" sayacı. Minimap patlatma noktalarını gösterir (kırmızı X, kurulunca yeşil), dinamitleri göstermez.
+- 4. dinamit kurulunca fitiller yanar, **60 sn** geri sayım başlar (üst ortada büyük sayı), asansörün kilidi açılır. Mağara sallanır, tavandan taşlar düşer, Gromm öfkeyle kükreyip kovalar: madencinin yerini bilir, biraz hızlanır (yine sprintin %90'ını geçmez).
+- Asansöre zamanında binersen: asansör yükselirken aşağıda dev patlama, ekran beyaza döner, Gromm'un son kükremesi, sessizlik. Bitiş ekranı: "Kurtuldun." ve toplam süre; ardından jenerik (asset sahipleri, `assets/LICENSES.md`'den; `src/scenes/end.js`) ve ana menü.
+- Süre biterse patlama içeride olur: ölüm ("Mağara çöktü").
+- Test: `?level=6`.
 - Test için `?level=3` ile istenen bölümden başlanabilir.
 
 ### Bölüm açılış ekranları
@@ -283,11 +296,10 @@ Kurallar:
 13. Rastgele özellik havuzu ve 4 özelliğin yapay zekası.
 14. Bölüm geçiş ekranları ve 2–5. bölüm haritaları.
 15. Sesler ve son cilalar.
-16. Final bölümü (tasarımı sonra yapılacak).
+16. Final bölümü (dinamitler, geri sayım, kaçış, jenerik).
 
 ---
 
 ## Açık konular (sonra karar verilecek)
-- Final bölümünün tasarımı.
 - Meşalenin bir süre sonra sönmesi (yakıt) eklensin mi? (Şimdilik meşale sadece bir standa geri bırakılabiliyor; yere bırakma yok.)
 - Cevher türleri farklı olsun mu (ağır/değerli/gürültülü)?

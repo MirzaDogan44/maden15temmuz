@@ -68,6 +68,15 @@ export const FX = {
   sparks: 'assets/madenci/minerman-adventure/fxs/sparks.png',
 };
 
+/**
+ * Eşyalar (Minerman Adventure). dynamite.png ve dynamite-pack.png: 3x3 kare,
+ * her biri 32x32 (hafif sallanan animasyon). Değiştirilmeden çizilir.
+ */
+export const ITEMS = {
+  dynamite: 'assets/madenci/minerman-adventure/items/dynamite.png',
+  dynamitePack: 'assets/madenci/minerman-adventure/items/dynamite-pack.png',
+};
+
 /** Oyunun açılışta yüklediği tüm görseller. */
 export function collectImagePaths() {
   const paths = new Set();
@@ -76,6 +85,7 @@ export function collectImagePaths() {
   for (const t of Object.values(TERRAIN)) paths.add(t.src);
   for (const p of Object.values(DECOR)) paths.add(p);
   for (const p of Object.values(FX)) paths.add(p);
+  for (const p of Object.values(ITEMS)) paths.add(p);
   return [...paths];
 }
 

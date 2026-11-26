@@ -211,7 +211,7 @@ export class Gromm {
 
   /** Kovalama hızı: yürüyüşten hızlı, sprintten hep yavaş (öfkeliyken biraz daha hızlı). */
   get chaseSpeed() {
-    return Math.min(GROMM.chaseSpeed * (this.rage ? 1.15 : 1), GROMM.maxSpeed);
+    return Math.min(GROMM.chaseSpeed * (this.rage ? 1.06 : 1), GROMM.maxSpeed);
   }
 
   get wanderSpeed() {
@@ -354,7 +354,9 @@ export class Gromm {
 
     // Sakin durumlar: önce gör, sonra duy, sonra kokla
     const calm = this.state !== 'chase' && this.state !== 'attack';
-    if (calm && alive) {
+    // final: öfkeli, madencinin yerini her zaman bilir
+    if (calm && alive && this.rage) this.startChase(player);
+    else if (calm && alive) {
       if (this.perceives(player, map, false)) this.startChase(player);
       else if (this.hear(map)) { /* sese yöneldi */ }
       else if ((this.state === 'idle' || this.state === 'wander' || this.state === 'look') && this.smell(map, dt)) { /* ize düştü */ }

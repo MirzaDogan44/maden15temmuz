@@ -47,6 +47,8 @@ export class Player {
     this.torchOn = false;
     /** Meşalenin kalan yanma süresi (sn) */
     this.torchTime = 0;
+    /** Final: sırtta taşınan dinamit (aynı anda 1) */
+    this.dynamite = false;
     /** Sırttaki çuvaldaki cevherler (tür listesi) */
     this.cargo = [];
     /** Kazma durumu: { target, t, cycle, onHit } veya null */

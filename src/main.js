@@ -10,7 +10,7 @@ import * as audio from './audio.js';
 import { StartScene } from './scenes/start.js';
 import { PlayScene } from './scenes/play.js';
 import { IntroScene } from './scenes/intro.js';
-import { FinaleScene } from './scenes/finale.js';
+import { EndScene } from './scenes/end.js';
 import { LEVELS } from './levels.js';
 import { shuffledOrder, abilitiesFor, newAbilityFor, START_LEVEL } from './abilities.js';
 
@@ -46,7 +46,7 @@ class Game {
 
   /** Yeni oyun: Gromm'un özellik sırası karıştırılır (oyun boyunca sabit). */
   newRun() {
-    this.run = { order: shuffledOrder() };
+    this.run = { order: shuffledOrder(), time: 0 };
   }
 
   /** Bu bölümde Gromm'un özellikleri. */
@@ -67,8 +67,14 @@ class Game {
 
   /** Bölüm bitti: sonraki bölümün açılışı veya final ekranı. */
   nextLevel(levelIndex) {
-    if (levelIndex + 1 < LEVELS.length && levelIndex + 1 < 5) this.startLevel(levelIndex + 1);
-    else this.scene = new FinaleScene(this);
+    if (levelIndex + 1 < LEVELS.length) this.startLevel(levelIndex + 1);
+    else this.scene = new EndScene(this, { time: this.run ? this.run.time : 0 });
+  }
+
+  /** Ana menüye dön. */
+  toMenu() {
+    this.scene = new StartScene(this);
+    this.scene.ready = true;
   }
 
   /** Ekranı sarsar. amount: piksel, time: saniye. */

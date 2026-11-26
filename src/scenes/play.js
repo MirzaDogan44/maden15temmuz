@@ -16,7 +16,8 @@ import { Ore } from '../ore.js';
 import { Gromm, GROMM, DIG_DEBUG } from '../gromm.js';
 import { drawJumpscare, JUMPSCARE } from '../jumpscare.js';
 import * as settings from '../settings.js';
-import { images, FX } from '../assets.js';
+import { images, FX, ITEMS } from '../assets.js';
+import { EndScene } from './end.js';
 import { makeRng } from '../rng.js';
 import { CompleteScene } from './complete.js';
 import { Lighting, TORCH, LAMP, HAND_TORCH, SELF_GLOW } from '../lighting.js';
@@ -30,6 +31,9 @@ import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
 const NO_LIGHT_HIDE = false;
+/** Final: dinamit kurma süresi (sn) ve geri sayım (sn) */
+const ARM_TIME = 3;
+const FINAL_COUNTDOWN = 60;
 
 /**
  * Harita çizimi pahalı (~0.3 sn), bölüm başına bir kere yapılır. Yeniden
@@ -140,6 +144,7 @@ export class PlayScene {
     this.items = placeItems(this.map, irng, [
       { kind: 'torch', count: 4 + (this.level.seed % 2), darkBias: 0.3 },
       { kind: 'food', count: 3 + ((this.level.seed >> 1) % 2), darkBias: 0.15 },
+      ...(this.map.blasts.length ? [{ kind: 'dynamite', count: this.map.blasts.length + 1, darkBias: 0.35 }] : []),
     ]).map((it) => ({
       ...it,
       kind: it.kind === 'food' ? foodKinds[Math.floor(irng() * 3)] : it.kind,
@@ -148,7 +153,7 @@ export class PlayScene {
       // karanlıkta da fark edilsin diye çok hafif bir ışık
       light: L.addStatic({
         x: it.x + 3, y: it.y - 6, radius: 22, intensity: 0.35, falloff: 1.3, applyDark: false,
-        color: it.kind === 'torch' ? [1, 0.5, 0.2] : [1, 0.85, 0.5],
+        color: it.kind === 'torch' ? [1, 0.5, 0.2] : it.kind === 'dynamite' ? [1, 0.3, 0.2] : [1, 0.85, 0.5],
       }),
     }));
     // Açlık ve sıcaklık (0..1)
@@ -182,6 +187,16 @@ export class PlayScene {
       };
     });
     for (const sw of this.switches) sw.green.flicker = 0;
+    // Final bölümü: patlatma noktaları ve dinamitler
+    this.isFinal = !!this.level.final;
+    this.blasts = this.map.blasts.map((b) => ({
+      tx: b.tx, ty: b.ty, x: b.tx * TILE + 16, y: b.ty * TILE, armed: false,
+      light: L.addStatic({ x: b.tx * TILE + 16, y: (b.ty + 1) * TILE - 6, ox: b.tx * TILE + 16, oy: (b.ty + 1) * TILE + 2, radius: 34, color: [1, 0.25, 0.15], intensity: 0.45, falloff: 1.3, applyDark: false }),
+    }));
+    this.arming = null;
+    /** Final geri sayımı (sn) — 4. dinamit kurulunca başlar */
+    this.countdown = null;
+    this.quakeTimer = 0;
     el.switchesTotal = this.switches.length;
     /** Gromm'un "duyma" özelliği için son sesler: { x, y, r, t } */
     this.noises = [];
@@ -267,6 +282,17 @@ export class PlayScene {
         act: () => this.pullSwitch(sw),
       });
     }
+    for (const b of this.blasts) {
+      this.targets.push({
+        kind: 'blast',
+        obj: b,
+        x: b.x,
+        y: (b.ty + 1) * TILE + 9,
+        box: { x0: b.tx * TILE - 6, y0: b.ty * TILE - 4, x1: (b.tx + 1) * TILE + 6, y1: (b.ty + 1) * TILE + 12 },
+        reach: 30,
+        act: () => this.startArming(b),
+      });
+    }
     this.targets.push({
       kind: 'elevator',
       x: (el.x0 + el.x1) / 2,
@@ -278,6 +304,7 @@ export class PlayScene {
     this.pending = null;
 
     this.minimap = new Minimap(this.map);
+    this.minimap.markers = this.blasts;
     this.particles = new Particles();
     this.marker = null;
     this.toasts = [];
@@ -350,7 +377,6 @@ export class PlayScene {
   pickItem(it) {
     if (it.taken) return;
     const p = this.player;
-    it.light.flicker = 0;
     if (FOOD[it.kind]) {
       it.taken = true;
       p.stop();
@@ -362,6 +388,16 @@ export class PlayScene {
       audio.playEat();
       this.toast({ bread: 'Ekmek yedin.', meat: 'Et yedin.', can: 'Konserve yedin.' }[it.kind]);
     }
+    if (it.kind === 'dynamite') {
+      if (p.dynamite) {
+        this.toast('Aynı anda sadece bir dinamit taşıyabilirsin.');
+        return;
+      }
+      it.taken = true;
+      p.dynamite = true;
+      audio.playArmTick();
+      this.toast('Dinamit aldın. İşaretli bir patlatma noktasına götür.', 3.2);
+    }
     if (it.kind === 'torch') {
       it.taken = true;
       p.takeTorch(TORCH_BURN_TIME);
@@ -369,6 +405,8 @@ export class PlayScene {
       this.toast(p.hasTorch ? 'Meşaleyi yaktın.' : 'Meşaleyi aldın.');
       for (let k = 0; k < 10; k++) this.particles.spawnEmber(it.x, it.y - 8);
     }
+    if (!it.taken) return;
+    it.light.flicker = 0;
     const tg = this.targets.find((t) => t.obj === it);
     if (tg) tg.disabled = true;
   }
@@ -860,6 +898,7 @@ export class PlayScene {
   /** Asansör: yük tamam ve bütün şalterler inmişse çalışır. */
   checkElevatorReady() {
     const el = this.elevator;
+    if (this.isFinal) return; // finalde asansör geri sayımla açılır
     if (el.ready || el.loaded.length < el.required || this.switchesDown < this.switches.length) return;
     el.ready = true;
     audio.playElevatorReady();
@@ -901,6 +940,7 @@ export class PlayScene {
       return;
     }
     if (el.ready) this.ride();
+    else if (this.isFinal) this.toast(`Asansör kilitli. Önce dinamitleri kur (${this.armedCount}/${this.blasts.length}).`, 3);
     else if (el.loaded.length < el.required) this.toast(`Asansöre ${el.required} cevher yüklemelisin (${el.loaded.length}/${el.required}).`, 3);
     else this.toast(`Asansörde elektrik yok: şalterleri indir (${this.switchesDown}/${this.switches.length}).`, 3);
   }
@@ -936,7 +976,7 @@ export class PlayScene {
   ride() {
     this.stopDigRumble();
     const el = this.elevator;
-    this.ending = { t: 0 };
+    this.ending = { t: 0, final: this.isFinal };
     this.player.stop();
     this.player.x = (el.x0 + el.x1) / 2;
     this.player.dir = 'down';
@@ -954,6 +994,7 @@ export class PlayScene {
   handleTap(tap) {
     if (this.ending || this.player.dead) return;
     this.eating = null;
+    if (this.arming) this.cancelArming();
     const wx = tap.x + Math.round(this.camX), wy = tap.y + Math.round(this.camY);
     // Önce dokunulabilen bir nesneye mi dokunuldu?
     const target = this.targets.find((tg) => !tg.disabled && wx >= tg.box.x0 && wx <= tg.box.x1 && wy >= tg.box.y0 && wy <= tg.box.y1);
@@ -991,9 +1032,16 @@ export class PlayScene {
       return;
     }
     this.t += dt;
-    if (!this.ending) this.stats.time += dt;
+    if (!this.ending) {
+      this.stats.time += dt;
+      if (this.game.run) this.game.run.time = (this.game.run.time || 0) + dt;
+    }
     if (this.ending) {
       this.ending.t += dt;
+      if (this.ending.final) {
+        this.updateFinalEnding();
+        return;
+      }
       if (this.ending.t > 2.4) {
         this.game.scene = new CompleteScene(this.game, { levelIndex: this.levelIndex, loaded: this.elevator.loaded.length, time: this.stats.time });
         return;
@@ -1107,6 +1155,8 @@ export class PlayScene {
 
     this.updateSurvival(dt);
     if (this.caught) return;
+    this.updateFinal(dt);
+    if (this.caught) return;
     this.updateGromm(dt);
     this.particles.updateDust(dt, p, (x, y) => this.map.solidAt(x, y));
     this.particles.updateEmbers(dt);
@@ -1153,9 +1203,10 @@ export class PlayScene {
       if (it.taken) continue;
       const x = it.x - camX, y = it.y - camY;
       if (x < -20 || y < -20 || x > this.scene.width + 20 || y > this.scene.height + 20) continue;
-      list.push({ y: it.y - 4, draw: () => drawItem(sc, it, x, y) });
+      list.push({ y: it.y - 4, draw: () => (it.kind === 'dynamite' ? this.drawDynamite(sc, x, y - 8, 1) : drawItem(sc, it, x, y)) });
     }
     for (const sw of this.switches) list.push({ y: (sw.ty + 1) * TILE - 1, draw: () => drawSwitch(sc, sw, camX, camY) });
+    for (const b of this.blasts) list.push({ y: (b.ty + 1) * TILE - 1, draw: () => this.drawBlast(sc, b, camX, camY) });
     const el = this.elevator;
     if (el.loaded.length) list.push({ y: el.y0 + 20, draw: () => this.drawElevatorCargo(sc, camX, camY) });
     if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.drawPlayer(sc, camX, camY) });
@@ -1368,6 +1419,10 @@ export class PlayScene {
       const c = this.caught;
       if (c.scare && c.t < JUMPSCARE.end) {
         drawJumpscare(ctx, w, h, c.t);
+      } else if (c.cause === 'collapse' && c.t < 1.2) {
+        // patlama içeride: beyaz flaş
+        ctx.fillStyle = `rgba(255,248,235,${Math.min(1, 1.6 - c.t).toFixed(2)})`;
+        ctx.fillRect(0, 0, w, h);
       } else {
         // kararma ve yazı
         const b = c.scare ? 1 : Math.min(1, c.t / 0.5);
@@ -1376,17 +1431,23 @@ export class PlayScene {
         const ta = Math.min(1, (c.t - c.textAt) / 0.4);
         if (ta > 0) {
           ctx.globalAlpha = ta;
-          const title = { gromm: 'Gromm seni yakaladı', hunger: 'Açlıktan bayıldın', cold: 'Dondun' }[c.cause] || 'Öldün';
+          const title = { gromm: 'Gromm seni yakaladı', hunger: 'Açlıktan bayıldın', cold: 'Dondun', collapse: 'Mağara çöktü' }[c.cause] || 'Öldün';
           drawText(ctx, title, Math.floor(w / 2), Math.floor(h / 2 - 8), { color: c.cause === 'cold' ? '#8ad0ff' : '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
           ctx.globalAlpha = 1;
         }
       }
     }
-    if (this.ending) {
+    if (this.ending && this.ending.final) {
+      // aşağıda dev patlama: ekran beyaza döner
+      const a = Math.max(0, Math.min(1, (this.ending.t - 1.4) / 0.6));
+      ctx.fillStyle = `rgba(255,248,235,${a.toFixed(2)})`;
+      ctx.fillRect(0, 0, w, h);
+    } else if (this.ending) {
       const a = Math.max(0, Math.min(1, (this.ending.t - 0.8) / 1.4));
       ctx.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`;
       ctx.fillRect(0, 0, w, h);
     }
+    if (this.countdown !== null && !this.ending && !this.caught) this.drawCountdown(ctx, w);
     // Mesajlar sprint butonunun üstünde kalsın (dar ekranlarda çakışmasın)
     let y = Math.min(h - 22, this.sprintButton.y - 16);
     for (let i = this.toasts.length - 1; i >= 0; i--) {
@@ -1490,6 +1551,209 @@ export class PlayScene {
    * Üst ortada kompakt sayaç şeridi (sol üst minimap'e, sağ üst butonlara ait):
    * asansördeki cevher, taşınan cevher.
    */
+  // ---------------- Final: dinamit ve kaçış ----------------
+
+  get armedCount() {
+    return this.blasts.filter((b) => b.armed).length;
+  }
+
+  startArming(b) {
+    const p = this.player;
+    if (b.armed) {
+      this.toast('Bu noktaya dinamit kuruldu.');
+      return;
+    }
+    if (!p.dynamite) {
+      this.toast('Burada dinamit kurulacak. Önce bir dinamit bul.', 3);
+      return;
+    }
+    p.stop();
+    this.arming = { b, t: 0, noise: 0 };
+    // kazma gibi duvara çalışır: dinamiti yerleştirir, bağlar
+    p.startDig(b.x, (b.ty + 1) * TILE, () => {
+      audio.playArmTick();
+      this.particles.spawnDebris(b.x, (b.ty + 1) * TILE + 2, 2, [[110, 96, 84], [200, 60, 50]], 0.4);
+    });
+    this.toast('Dinamit kuruluyor...', 1.5);
+  }
+
+  cancelArming() {
+    this.arming = null;
+    this.player.stopDig();
+    this.toast('Dinamit kurma yarıda kaldı.', 1.6);
+  }
+
+  updateFinal(dt) {
+    if (!this.isFinal || this.ending) return;
+    const p = this.player;
+    // dinamit kurma (birkaç saniye, ses çıkarır)
+    const a = this.arming;
+    if (a) {
+      if (!p.dig) {
+        this.arming = null;
+      } else {
+        a.t += dt;
+        a.noise -= dt;
+        if (a.noise <= 0) {
+          a.noise = 1;
+          this.emitNoise(a.b.x, (a.b.ty + 1) * TILE, NOISE.dynamite);
+        }
+        if (a.t >= ARM_TIME) {
+          a.b.armed = true;
+          this.arming = null;
+          p.stopDig();
+          p.dynamite = false;
+          audio.playFuse(0.5);
+          const n = this.armedCount, total = this.blasts.length;
+          this.toast(`Dinamit kuruldu (${n}/${total}).`, 2.5);
+          if (n >= total) this.startCountdown();
+        }
+      }
+    }
+    if (this.countdown === null) return;
+    // geri sayım: mağara sallanır, taşlar düşer, fitiller cızırdar
+    const before = this.countdown;
+    this.countdown -= dt;
+    if (Math.ceil(this.countdown) !== Math.ceil(before) && this.countdown > 0) audio.playCountdownTick(this.countdown <= 10);
+    this.quakeTimer -= dt;
+    if (this.quakeTimer <= 0) {
+      const late = 1 - this.countdown / FINAL_COUNTDOWN;
+      this.quakeTimer = 2.6 - 1.8 * late + Math.random();
+      this.game.shake(1.5 + 3 * late, 0.6);
+      audio.playRockfall();
+      for (let k = 0; k < 3 + Math.floor(late * 6); k++) {
+        const px = p.x + (Math.random() - 0.5) * 220, py = p.y + (Math.random() - 0.5) * 140;
+        if (!this.map.solidAt(px, py)) this.particles.spawnFalling(px, py);
+      }
+    }
+    for (const b of this.blasts) if (Math.random() < dt * 8) this.particles.spawnEmber(b.x + 2, (b.ty + 1) * TILE - 10);
+    if (this.countdown <= 0) {
+      this.countdown = 0;
+      audio.playBigExplosion(true);
+      this.game.shake(8, 1.5);
+      this.onCaught('collapse');
+    }
+  }
+
+  startCountdown() {
+    this.countdown = FINAL_COUNTDOWN;
+    const el = this.elevator;
+    el.ready = true;
+    audio.playElevatorReady();
+    audio.playFuse(1);
+    this.toast('Fitiller yandı! 60 saniye içinde asansöre koş!', 4.5);
+    this.game.shake(4, 1);
+    // Gromm öfkeyle kükrer ve kovalar (sprintten yine yavaş)
+    const g = this.gromm;
+    g.rage = true;
+    audio.playRoar();
+    if (!g.dig) g.startChase(this.player);
+  }
+
+  /** Final: asansör yükselir, aşağıda dev patlama, beyaz ekran, son kükreme, sessizlik. */
+  updateFinalEnding() {
+    const e = this.ending;
+    if (!e.boom && e.t > 1.4) {
+      e.boom = true;
+      audio.playBigExplosion(false);
+      this.game.shake(7, 2.5);
+    }
+    if (!e.roar && e.t > 2.3) {
+      e.roar = true;
+      audio.playRoar();
+    }
+    if (!e.quiet && e.t > 4.2) {
+      e.quiet = true;
+      audio.stopAmbience();
+    }
+    if (e.t > 5.2) this.game.scene = new EndScene(this.game, { time: this.game.run ? this.game.run.time : this.stats.time });
+  }
+
+  /** Patlatma noktası: duvarda çatlak, kırmızı X ve tahta destek; kurulunca dinamit paketi. */
+  drawBlast(sc, b, camX, camY) {
+    const x = Math.round(b.x - camX), y = Math.round(b.y - camY);
+    if (x < -40 || y < -40 || x > sc.canvas.width + 40 || y > sc.canvas.height + 40) return;
+    // tahta destek (iki dikme, üstte kiriş)
+    sc.fillStyle = '#2a1608';
+    sc.fillRect(x - 15, y + 2, 5, 30);
+    sc.fillRect(x + 10, y + 2, 5, 30);
+    sc.fillRect(x - 16, y, 32, 5);
+    sc.fillStyle = '#7a5030';
+    sc.fillRect(x - 14, y + 3, 3, 28);
+    sc.fillRect(x + 11, y + 3, 3, 28);
+    sc.fillRect(x - 15, y + 1, 30, 3);
+    sc.fillStyle = '#9a6a40';
+    sc.fillRect(x - 15, y + 1, 30, 1);
+    // çatlak
+    sc.fillStyle = '#0a0606';
+    const cr = [[0, 8], [1, 9], [1, 10], [0, 11], [-1, 12], [-1, 13], [0, 14], [1, 15], [2, 16], [2, 17], [1, 18], [0, 19], [-1, 20], [-2, 21], [3, 12], [4, 11], [-2, 15], [-3, 16], [-4, 17]];
+    for (const [dx, dy] of cr) sc.fillRect(x + dx, y + dy, 1, 1);
+    // kırmızı X
+    if (!b.armed) {
+      sc.fillStyle = '#5a0a08';
+      for (let i = 0; i < 12; i++) {
+        sc.fillRect(x - 6 + i, y + 8 + i, 2, 2);
+        sc.fillRect(x + 5 - i, y + 8 + i, 2, 2);
+      }
+      sc.fillStyle = '#d82a1a';
+      for (let i = 0; i < 12; i++) {
+        sc.fillRect(x - 6 + i, y + 8 + i, 1, 1);
+        sc.fillRect(x + 5 - i, y + 8 + i, 1, 1);
+      }
+    } else {
+      this.drawDynamite(sc, x, y + 18, 0.75, true);
+    }
+  }
+
+  /** Dinamit sprite'ı (değiştirilmeden; animasyon karesi, ölçek tam/yarım). */
+  drawDynamite(sc, x, y, scale = 1, pack = false) {
+    const img = images.get(pack ? ITEMS.dynamitePack : ITEMS.dynamite);
+    const f = Math.floor(this.t * 6) % 9;
+    const s = Math.round(32 * scale);
+    if (!img) {
+      sc.fillStyle = '#c82a2a';
+      sc.fillRect(Math.round(x - 3 * scale), Math.round(y - 6 * scale), Math.ceil(6 * scale), Math.ceil(12 * scale));
+      return;
+    }
+    sc.drawImage(img, (f % 3) * 32, Math.floor(f / 3) * 32, 32, 32, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+  }
+
+  /** Üst ortada "Dinamit: 2/4" sayacı. */
+  drawFinalCounter(ctx, w) {
+    const n = this.armedCount, total = this.blasts.length;
+    const txt = `Dinamit: ${n}/${total}`;
+    const carry = this.player.dynamite;
+    const tw = textWidth(txt) + 16 + (carry ? 14 : 0);
+    let x = Math.floor(w / 2 - tw / 2);
+    const y = 4;
+    ctx.fillStyle = 'rgba(8,6,10,0.65)';
+    ctx.fillRect(x, y, tw, 15);
+    ctx.fillStyle = 'rgba(120,100,80,0.35)';
+    ctx.fillRect(x, y, tw, 1);
+    // küçük dinamit simgesi
+    ctx.fillStyle = '#c8302a';
+    ctx.fillRect(x + 5, y + 4, 3, 8);
+    ctx.fillStyle = '#ff7a5a';
+    ctx.fillRect(x + 5, y + 4, 1, 8);
+    ctx.fillStyle = '#b08a5a';
+    ctx.fillRect(x + 7, y + 2, 1, 2);
+    drawText(ctx, txt, x + 12, y + 1, { color: n >= total ? '#8dff9a' : '#e6d2a8', shadow: '#000' });
+    if (carry) {
+      // taşınan dinamit
+      ctx.fillStyle = '#ffd970';
+      ctx.fillRect(x + tw - 10, y + 4, 3, 8);
+    }
+  }
+
+  /** Geri sayım: büyük kırmızı sayı, son 10 sn'de nabız gibi. */
+  drawCountdown(ctx, w) {
+    const c = Math.max(0, this.countdown);
+    const txt = `${Math.floor(c / 60)}:${String(Math.floor(c % 60)).padStart(2, '0')}`;
+    const urgent = c <= 10;
+    const size = urgent && Math.floor(this.t * 4) % 2 ? 3 : 2;
+    drawText(ctx, txt, Math.floor(w / 2), 24, { color: urgent ? '#ff3a2a' : '#ffb040', size, align: 'center', shadow: '#2a0606' });
+  }
+
   // ---------------- Açlık ve soğuk ----------------
 
   /** Madenci bir duvar meşalesinin, lambanın veya dolu bir standın yanında mı? */
@@ -1600,6 +1864,11 @@ export class PlayScene {
       tc.globalCompositeOperation = 'source-over';
       sc.drawImage(T, Math.round(ox - camX) + jx, Math.round(oy - camY) + jy);
     }
+    // sırttaki dinamit
+    if (p.dynamite && !p.dead) {
+      const bx = Math.round(p.x - camX) + (p.dir === 'left' ? 5 : p.dir === 'right' ? -5 : 0), by = Math.round(p.y - camY) - 18 + jy;
+      if (p.dir !== 'down') this.drawDynamite(sc, bx, by, 0.5);
+    }
     // yerken elindeki yemek
     if (this.eating) {
       const x = Math.round(p.x - camX) + (p.dir === 'left' ? -6 : 4), y = Math.round(p.y - camY) - 16 + jy;
@@ -1660,6 +1929,7 @@ export class PlayScene {
 
   drawCounters(ctx, w) {
     const el = this.elevator, p = this.player;
+    if (this.isFinal) return this.drawFinalCounter(ctx, w);
     const items = [
       { icon: 'cage', text: `${el.loaded.length}/${el.required}`, color: el.loaded.length >= el.required ? '#8dff9a' : '#e6d2a8', on: el.ready },
       { icon: 'sack', text: `${p.carried}/${MAX_CARRY}`, color: p.carried ? '#ffd970' : '#a89a84' },
