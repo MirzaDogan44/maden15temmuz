@@ -51,6 +51,25 @@ export const TORCH_BURN_TIME = 120;
 /** Son bu kadar saniyede meşale titreyip kararır. */
 export const TORCH_LOW_TIME = 20;
 
+// ---- Açlık ve soğuk (hafif bir baskı; asıl tehlike Gromm) ----
+const SURVIVAL_FAST = new URLSearchParams(location.search).get('survival') === 'fast';
+/** ?survival=fast ile barlar 5 kat hızlı azalır (test için). */
+export const SURVIVAL_SPEED = SURVIVAL_FAST ? 5 : 1;
+/** Dolu açlık barı bu kadar saniyede biter. */
+export const HUNGER_TIME = 360;
+/** Koşarken açlık bu kat hızlı azalır. */
+export const HUNGER_RUN_MULT = 1.6;
+/** Dolu sıcaklık barı bu kadar saniyede biter. */
+export const COLD_TIME = 240;
+/** Karanlık bölgelerde soğuma bu kat hızlı. */
+export const COLD_DARK_MULT = 1.4;
+/** Duvar meşalesi/lambası yanında boştan doluya ısınma süresi (sn). */
+export const WARM_FIRE_TIME = 12;
+/** Elde yanan meşaleyle boştan doluya ısınma süresi (sn). */
+export const WARM_TORCH_TIME = 90;
+/** Yemeklerin doyurduğu miktar (0..1). */
+export const FOOD = { bread: 0.35, meat: 0.6, can: 0.6 };
+
 /** Koklama: yemek yedikten sonra bu kadar saniye iz 2 kat güçlü kalır. */
 export const SCENT_BOOST_TIME = 15;
 

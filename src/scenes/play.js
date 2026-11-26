@@ -7,7 +7,7 @@
 //   3) Ana canvas'a kendi ışığı olanlar eklenir: alevler, kıvılcımlar,
 //      kristal parıltıları, toz, tıklama işareti, mesajlar
 
-import { DEBUG, TILE, NOISE, MAX_CARRY, TORCH_BURN_TIME, TORCH_LOW_TIME } from '../config.js';
+import { DEBUG, TILE, NOISE, MAX_CARRY, TORCH_BURN_TIME, TORCH_LOW_TIME, SURVIVAL_SPEED, HUNGER_TIME, HUNGER_RUN_MULT, COLD_TIME, COLD_DARK_MULT, WARM_FIRE_TIME, WARM_TORCH_TIME, FOOD, SCENT_BOOST_TIME } from '../config.js';
 import { placeItems } from '../items.js';
 import { LEVELS } from '../levels.js';
 import { TileMap } from '../map.js';
@@ -135,13 +135,30 @@ export class PlayScene {
       return ore;
     });
     // Yerdeki eşyalar (sönük meşaleler; her denemede aynı yerlerde)
-    this.items = placeItems(this.map, makeRng(this.level.seed + 7), [{ kind: 'torch', count: 4 + (this.level.seed % 2), darkBias: 0.3 }]).map((it) => ({
+    const irng = makeRng(this.level.seed + 7);
+    const foodKinds = ['bread', 'meat', 'can'];
+    this.items = placeItems(this.map, irng, [
+      { kind: 'torch', count: 4 + (this.level.seed % 2), darkBias: 0.3 },
+      { kind: 'food', count: 3 + ((this.level.seed >> 1) % 2), darkBias: 0.15 },
+    ]).map((it) => ({
       ...it,
+      kind: it.kind === 'food' ? foodKinds[Math.floor(irng() * 3)] : it.kind,
       taken: false,
       phase: Math.random() * 10,
       // karanlıkta da fark edilsin diye çok hafif bir ışık
-      light: L.addStatic({ x: it.x + 3, y: it.y - 6, radius: 22, color: [1, 0.5, 0.2], intensity: 0.35, falloff: 1.3, applyDark: false }),
+      light: L.addStatic({
+        x: it.x + 3, y: it.y - 6, radius: 22, intensity: 0.35, falloff: 1.3, applyDark: false,
+        color: it.kind === 'torch' ? [1, 0.5, 0.2] : [1, 0.85, 0.5],
+      }),
     }));
+    // Açlık ve sıcaklık (0..1)
+    this.hunger = 1;
+    this.warmth = 1;
+    this.eating = null;
+    this.survivalFx = { growl: 8, chatter: 2, breath: 0, heat: 0 };
+    this.breaths = [];
+    this.heatFx = [];
+    this.frost = null;
     // Asansör: lamba kırmızı (yük eksik) / yeşil (hazır)
     const e = this.map.elevator;
     this.elevator = {
@@ -334,6 +351,17 @@ export class PlayScene {
     if (it.taken) return;
     const p = this.player;
     it.light.flicker = 0;
+    if (FOOD[it.kind]) {
+      it.taken = true;
+      p.stop();
+      this.pending = null;
+      this.eating = { t: 0, dur: 0.9, kind: it.kind };
+      this.hunger = Math.min(1, this.hunger + FOOD[it.kind]);
+      // koklama: yemekten sonra iz bir süre güçlü
+      this.scentBoostUntil = this.t + SCENT_BOOST_TIME;
+      audio.playEat();
+      this.toast({ bread: 'Ekmek yedin.', meat: 'Et yedin.', can: 'Konserve yedin.' }[it.kind]);
+    }
     if (it.kind === 'torch') {
       it.taken = true;
       p.takeTorch(TORCH_BURN_TIME);
@@ -403,10 +431,12 @@ export class PlayScene {
    * Gromm yakaladı. Oyun donar; ayarlarda jumpscare açıksa yüz ve çığlık,
    * kapalıysa sadece kararma ve yazı. Sonra bölüm baştan başlar.
    */
-  onCaught() {
-    const scare = settings.get('jumpscare');
+  /** Ölüm: cause 'gromm' | 'hunger' | 'cold' */
+  onCaught(cause = 'gromm') {
+    const scare = cause === 'gromm' && settings.get('jumpscare');
     this.caught = {
       t: 0,
+      cause,
       scare,
       screamed: false,
       // yazı ve yeniden başlama zamanları
@@ -415,7 +445,7 @@ export class PlayScene {
     };
     this.player.setDead();
     this.stopDigRumble();
-    this.gromm.attack(this.player);
+    if (cause === 'gromm') this.gromm.attack(this.player);
     this.pending = null;
     this.marker = null;
   }
@@ -923,6 +953,7 @@ export class PlayScene {
 
   handleTap(tap) {
     if (this.ending || this.player.dead) return;
+    this.eating = null;
     const wx = tap.x + Math.round(this.camX), wy = tap.y + Math.round(this.camY);
     // Önce dokunulabilen bir nesneye mi dokunuldu?
     const target = this.targets.find((tg) => !tg.disabled && wx >= tg.box.x0 && wx <= tg.box.x1 && wy >= tg.box.y0 && wy <= tg.box.y1);
@@ -1074,6 +1105,8 @@ export class PlayScene {
       this.toast('Karanlıkta meşaleni söndür. Gromm seni göremez.', 5);
     }
 
+    this.updateSurvival(dt);
+    if (this.caught) return;
     this.updateGromm(dt);
     this.particles.updateDust(dt, p, (x, y) => this.map.solidAt(x, y));
     this.particles.updateEmbers(dt);
@@ -1125,7 +1158,7 @@ export class PlayScene {
     for (const sw of this.switches) list.push({ y: (sw.ty + 1) * TILE - 1, draw: () => drawSwitch(sc, sw, camX, camY) });
     const el = this.elevator;
     if (el.loaded.length) list.push({ y: el.y0 + 20, draw: () => this.drawElevatorCargo(sc, camX, camY) });
-    if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.player.draw(sc, camX, camY) });
+    if (!(this.ending && this.ending.t > 1.2)) list.push({ y: this.player.y, draw: () => this.drawPlayer(sc, camX, camY) });
     const g = this.gromm;
     if (g.x > camX - 80 && g.x < camX + this.scene.width + 80 && g.y > camY - 20 && g.y < camY + this.scene.height + 130) {
       list.push({ y: g.y, draw: () => g.draw(sc, camX, camY) });
@@ -1183,6 +1216,7 @@ export class PlayScene {
     this.drawPathMarker(ctx, camX, camY);
     this.drawStaminaBar(ctx, camX, camY);
     this.drawTorchTimer(ctx, camX, camY);
+    this.drawFrost(ctx, w, h);
     this.layoutSprintButton(w, h);
     this.sprintButton.draw(ctx);
     this.torchButton.draw(ctx);
@@ -1222,6 +1256,16 @@ export class PlayScene {
       const v = 0.35 + 0.3 * Math.sin(this.t * 2.3 + it.phase);
       const x = Math.round(it.x - camX), y = Math.round(it.y - camY);
       ctx.globalAlpha = v;
+      if (it.kind !== 'torch') {
+        // yiyecek: arada bir küçük parıltı
+        if (Math.sin(this.t * 1.5 + it.phase * 3) > 0.88) {
+          ctx.fillStyle = '#fff0c0';
+          ctx.fillRect(x + 2, y - 13, 1, 3);
+          ctx.fillRect(x + 1, y - 12, 3, 1);
+        }
+        ctx.globalAlpha = 1;
+        continue;
+      }
       ctx.fillStyle = '#ff7a2a';
       ctx.fillRect(x + 6, y - 7, 1, 1);
       ctx.fillRect(x + 8, y - 9, 1, 1);
@@ -1285,6 +1329,7 @@ export class PlayScene {
     }
     ctx.globalAlpha = 1;
     this.particles.drawEffects(ctx, camX, camY, light, images.get(FX.sparks));
+    this.drawSurvivalFx(ctx, camX, camY);
     this.gromm.drawEyes(ctx, camX, camY, this.t);
     this.drawDigMarks(ctx, camX, camY, true);
     if (DIG_DEBUG) this.drawDigDebug(ctx, camX, camY);
@@ -1317,6 +1362,7 @@ export class PlayScene {
   /** Bölüm adı, sayaçlar ve mesajlar. */
   drawOverlay(ctx, w, h) {
     this.minimap.draw(ctx, 4, 4, this.player, this.t);
+    this.drawBars(ctx, 4, 4 + this.minimap.canvas.height + 3, this.minimap.canvas.width);
     this.drawCounters(ctx, w);
     if (this.caught) {
       const c = this.caught;
@@ -1330,7 +1376,8 @@ export class PlayScene {
         const ta = Math.min(1, (c.t - c.textAt) / 0.4);
         if (ta > 0) {
           ctx.globalAlpha = ta;
-          drawText(ctx, 'Gromm seni yakaladı', Math.floor(w / 2), Math.floor(h / 2 - 8), { color: '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
+          const title = { gromm: 'Gromm seni yakaladı', hunger: 'Açlıktan bayıldın', cold: 'Dondun' }[c.cause] || 'Öldün';
+          drawText(ctx, title, Math.floor(w / 2), Math.floor(h / 2 - 8), { color: c.cause === 'cold' ? '#8ad0ff' : '#c83a2a', size: w > 300 ? 2 : 1, align: 'center' });
           ctx.globalAlpha = 1;
         }
       }
@@ -1443,6 +1490,174 @@ export class PlayScene {
    * Üst ortada kompakt sayaç şeridi (sol üst minimap'e, sağ üst butonlara ait):
    * asansördeki cevher, taşınan cevher.
    */
+  // ---------------- Açlık ve soğuk ----------------
+
+  /** Madenci bir duvar meşalesinin, lambanın veya dolu bir standın yanında mı? */
+  nearFire() {
+    const p = this.player;
+    const check = (x, y) => Math.hypot(x - p.x, y + 18 - p.y) < 72 && !this.map.rayBlocked(p.x, p.y - 8, x, y + 20);
+    for (const t of this.torches) if (check(t.x, t.y)) return true;
+    for (const l of this.lamps) if (check(l.x, l.y)) return true;
+    for (const st of this.stands) if (st.hasTorch && Math.hypot(st.x - p.x, st.y + 20 - p.y) < 60) return true;
+    return false;
+  }
+
+  updateSurvival(dt) {
+    const p = this.player;
+    if (this.ending || p.dead || this.fadeIn < 1) return;
+    const k = SURVIVAL_SPEED;
+    // yeme animasyonu: kısa bir süre durur
+    if (this.eating) {
+      this.eating.t += dt;
+      if (this.eating.t >= this.eating.dur) this.eating = null;
+    }
+    // açlık
+    this.hunger -= (dt / HUNGER_TIME) * (p.running ? HUNGER_RUN_MULT : 1) * k;
+    // sıcaklık: ateş yanında hızla, elde yanan meşaleyle yavaşça ısınır
+    const fire = this.nearFire();
+    const fx = this.survivalFx;
+    if (fire) this.warmth += dt / WARM_FIRE_TIME;
+    else if (p.torchLit) this.warmth += dt / WARM_TORCH_TIME;
+    else this.warmth -= (dt / COLD_TIME) * (this.lighting.darkAt(p.x, p.y) > 0.5 ? COLD_DARK_MULT : 1) * k;
+    this.hunger = Math.max(0, Math.min(1, this.hunger));
+    this.warmth = Math.max(0, Math.min(1, this.warmth));
+    // ısınma parıltıları
+    if ((fire || p.torchLit) && this.warmth < 0.999) {
+      fx.heat -= dt;
+      if (fx.heat <= 0) {
+        fx.heat = fire ? 0.12 : 0.35;
+        this.heatFx.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y - 4 - Math.random() * 10, t: 0 });
+      }
+    }
+    // yavaşlama
+    p.speedMod = (this.hunger < 0.15 ? 0.88 : 1) * (this.warmth < 0.1 ? 0.78 : 1);
+    // sesler: mide guruldaması, diş takırtısı
+    if (this.hunger < 0.15) {
+      fx.growl -= dt;
+      if (fx.growl <= 0) {
+        fx.growl = 10 + Math.random() * 10;
+        audio.playStomachGrowl();
+      }
+    }
+    if (this.warmth < 0.25) {
+      fx.chatter -= dt;
+      if (fx.chatter <= 0) {
+        fx.chatter = 3.5 + Math.random() * 4;
+        audio.playTeethChatter();
+      }
+      // nefesten buhar
+      fx.breath -= dt;
+      if (fx.breath <= 0) {
+        fx.breath = 1.1 + Math.random() * 0.5;
+        const side = p.dir === 'left' ? -6 : p.dir === 'right' ? 6 : 2;
+        this.breaths.push({ x: p.x + side, y: p.y - 20, t: 0, dx: side * 1.5 });
+      }
+    }
+    for (const b of this.breaths) b.t += dt;
+    this.breaths = this.breaths.filter((b) => b.t < 1.4);
+    for (const h of this.heatFx) h.t += dt;
+    this.heatFx = this.heatFx.filter((h) => h.t < 0.9);
+    // ölüm
+    if (this.hunger <= 0) {
+      this.toast('Açlıktan bayıldın...', 3);
+      this.onCaught('hunger');
+    } else if (this.warmth <= 0) {
+      this.toast('Dondun...', 3);
+      this.onCaught('cold');
+    } else if (this.hunger < 0.25 && !this.hungerWarned) {
+      this.hungerWarned = true;
+      this.toast('Karnın acıktı. Yerde yiyecek ara.', 3);
+    } else if (this.warmth < 0.25 && !this.coldWarned) {
+      this.coldWarned = true;
+      this.toast('Üşüyorsun! Bir meşalenin yanında ısın.', 3);
+    }
+    if (this.hunger > 0.35) this.hungerWarned = false;
+    if (this.warmth > 0.35) this.coldWarned = false;
+  }
+
+  /** Madenci: soğudukça maviye döner, çok soğukta titrer; yerken kafası iner kalkar. */
+  drawPlayer(sc, camX, camY) {
+    const p = this.player;
+    const cold = this.warmth < 0.5 ? (0.5 - this.warmth) / 0.5 : 0;
+    let jx = 0, jy = 0;
+    if (this.warmth < 0.25 && !p.dead) jx = Math.random() < 0.5 ? -1 : 1;
+    if (this.eating) jy = Math.floor(this.eating.t * 8) % 2;
+    if (cold <= 0.01) {
+      p.draw(sc, camX - jx, camY - jy);
+    } else {
+      // çizimi küçük bir tampona al, üstüne buz rengi bindir (sprite'ın kendisi değişmez)
+      const T = this.tintCanvas || (this.tintCanvas = document.createElement('canvas'));
+      T.width = 64;
+      T.height = 72;
+      const tc = T.getContext('2d');
+      tc.imageSmoothingEnabled = false;
+      const ox = Math.round(p.x) - 32, oy = Math.round(p.y) - 56;
+      p.draw(tc, ox, oy);
+      tc.globalCompositeOperation = 'source-atop';
+      const ice = this.warmth < 0.1;
+      tc.fillStyle = ice ? `rgba(200,236,255,${(0.35 + 0.4 * cold).toFixed(2)})` : `rgba(90,150,255,${(0.55 * cold).toFixed(2)})`;
+      tc.fillRect(0, 0, 64, 72);
+      tc.globalCompositeOperation = 'source-over';
+      sc.drawImage(T, Math.round(ox - camX) + jx, Math.round(oy - camY) + jy);
+    }
+    // yerken elindeki yemek
+    if (this.eating) {
+      const x = Math.round(p.x - camX) + (p.dir === 'left' ? -6 : 4), y = Math.round(p.y - camY) - 16 + jy;
+      drawFoodBite(sc, this.eating.kind, x, y);
+    }
+  }
+
+  /** Buhar ve ısınma parıltıları (ışıktan sonra). */
+  drawSurvivalFx(ctx, camX, camY) {
+    for (const b of this.breaths) {
+      const k = b.t / 1.4;
+      const r = 1 + Math.floor(k * 3);
+      ctx.fillStyle = `rgba(220,235,255,${(0.5 * (1 - k)).toFixed(2)})`;
+      const x = Math.round(b.x + b.dx * k - camX), y = Math.round(b.y - k * 8 - camY);
+      ctx.fillRect(x - r, y, r * 2, 1);
+      ctx.fillRect(x - r + 1, y - 1, r * 2 - 2, 3);
+    }
+    for (const h of this.heatFx) {
+      const k = h.t / 0.9;
+      ctx.fillStyle = `rgba(255,${160 + Math.floor(60 * k)},80,${(0.8 * (1 - k)).toFixed(2)})`;
+      ctx.fillRect(Math.round(h.x + Math.sin(h.t * 12) * 1.5 - camX), Math.round(h.y - k * 14 - camY), 1, 1);
+    }
+  }
+
+  /** Soğukta ekran kenarlarından büyüyen buz (pixel art, seviyesi değişince yeniden çizilir). */
+  drawFrost(ctx, w, h) {
+    const f = this.warmth < 0.25 ? Math.min(1, (0.25 - this.warmth) / 0.2) : 0;
+    const q = Math.round(f * 10) / 10;
+    if (q <= 0) return;
+    let fr = this.frost;
+    if (!fr || fr.q !== q || fr.w !== w || fr.h !== h) fr = this.frost = { q, w, h, canvas: makeFrost(w, h, q) };
+    ctx.drawImage(fr.canvas, 0, 0);
+  }
+
+  /** Sol üstte, minimap'in altında: açlık ve sıcaklık barları. */
+  drawBars(ctx, x, y, width) {
+    const bars = [
+      { v: this.hunger, icon: 'food', color: '#c8783a', dark: '#5a3418' },
+      { v: this.warmth, icon: this.warmth >= 0.5 ? 'flame' : 'snow', color: mixColor('#9ad8ff', '#ff9a3a', this.warmth), dark: '#1c2a3a' },
+    ];
+    for (const b of bars) {
+      const blink = b.v < 0.25 ? 0.55 + 0.45 * Math.sin(this.t * 4) : 1;
+      ctx.globalAlpha = 0.85 * blink;
+      ctx.fillStyle = 'rgba(10,8,12,0.85)';
+      ctx.fillRect(x, y, width, 8);
+      drawBarIcon(ctx, b.icon, x + 1, y + 1);
+      const bx = x + 9, bw = width - 11;
+      ctx.fillStyle = b.dark;
+      ctx.fillRect(bx, y + 2, bw, 4);
+      ctx.fillStyle = b.color;
+      ctx.fillRect(bx, y + 2, Math.max(0, Math.round(bw * b.v)), 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(bx, y + 2, Math.max(0, Math.round(bw * b.v)), 1);
+      y += 10;
+    }
+    ctx.globalAlpha = 1;
+  }
+
   drawCounters(ctx, w) {
     const el = this.elevator, p = this.player;
     const items = [
@@ -1522,13 +1737,119 @@ function stepFlicker(s, dt, t) {
   return s.flick + Math.sin(t * 7.1 + s.phase) * 0.05;
 }
 
+/** İki rengi karıştırır (t=0: a, t=1: b). */
+function mixColor(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.max(0, Math.min(1, t))));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+const BAR_ICONS = {
+  food: { px: ['..###..', '.#####.', '#######', '#.#.#.#', '.#####.', '.......'], c: ['#e0a860', '#8a5a2a'] },
+  flame: { px: ['...#...', '..##...', '..###..', '.#####.', '.##.##.', '..###..'], c: ['#ffb040', '#c84a1a'] },
+  snow: { px: ['#..#..#', '.#.#.#.', '..###..', '###.###', '..###..', '.#.#.#.'], c: ['#cdeeff', '#6aa8d8'] },
+};
+
+function drawBarIcon(ctx, name, x, y) {
+  const ic = BAR_ICONS[name];
+  for (let r = 0; r < ic.px.length; r++) {
+    for (let c = 0; c < ic.px[r].length; c++) {
+      if (ic.px[r][c] !== '#') continue;
+      ctx.fillStyle = r < 2 ? ic.c[0] : ic.c[r % 2];
+      ctx.fillRect(x + c, y + r, 1, 1);
+    }
+  }
+}
+
+/** Ekran kenarı buzu: kenara uzaklık + gürültü ile pikselli, kristalli bir kenar. */
+function makeFrost(w, h, q) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  const id = g.createImageData(w, h);
+  const d = id.data;
+  const maxD = Math.min(w, h) * (0.04 + 0.17 * q);
+  const hash = (x, y) => {
+    let n = x * 374761393 + y * 668265263;
+    n = (n ^ (n >>> 13)) * 1274126177;
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+  };
+  // kenar boyunca yavaş değişen kalınlık (kristal dilleri)
+  const tongue = (t) => 0.55 + 0.25 * Math.sin(t * 0.09) + 0.2 * Math.sin(t * 0.23 + 1.7);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dl = x, dr = w - 1 - x, dt = y, db = h - 1 - y;
+      let dist = Math.min(dl, dr, dt, db);
+      if (dist > maxD) continue;
+      const along = dist === dl || dist === dr ? y : x;
+      const lim = maxD * tongue(along + (dist === dl || dist === dt ? 0 : 500));
+      const n = hash(x >> 1, y >> 1);
+      if (dist > lim * (0.75 + 0.35 * n)) continue;
+      const k = 1 - dist / (lim + 1);
+      const i = (y * w + x) * 4;
+      const bright = n > 0.85 ? 1 : 0.75 + 0.2 * k;
+      d[i] = 170 * bright + 40;
+      d[i + 1] = 215 * bright + 30;
+      d[i + 2] = 255;
+      d[i + 3] = Math.min(225, (70 + 140 * k) * (0.45 + 0.55 * q));
+    }
+  }
+  g.putImageData(id, 0, 0);
+  return c;
+}
+
+/** Yerken elde tutulan küçük yemek parçası. */
+function drawFoodBite(ctx, kind, x, y) {
+  const col = { bread: ['#d8a050', '#8a5a2a'], meat: ['#a83a2a', '#e8d8c0'], can: ['#9aa0a8', '#5a6068'] }[kind];
+  ctx.fillStyle = col[1];
+  ctx.fillRect(x - 1, y - 1, 5, 4);
+  ctx.fillStyle = col[0];
+  ctx.fillRect(x, y, 3, 2);
+}
+
 /** Yerdeki eşya (ışıktan önce çizilir). */
 function drawItem(ctx, it, x, y) {
   x = Math.round(x);
   y = Math.round(y);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(x - 7, y - 1, 14, 3);
-  if (it.kind === 'torch') {
+  if (it.kind === 'bread') {
+    ctx.fillStyle = '#2a1608';
+    ctx.fillRect(x - 7, y - 7, 14, 7);
+    ctx.fillRect(x - 6, y - 8, 12, 9);
+    ctx.fillStyle = '#b8783a';
+    ctx.fillRect(x - 6, y - 7, 12, 6);
+    ctx.fillStyle = '#e0a860';
+    ctx.fillRect(x - 5, y - 7, 10, 2);
+    ctx.fillStyle = '#8a5222';
+    ctx.fillRect(x - 3, y - 6, 1, 2);
+    ctx.fillRect(x, y - 6, 1, 2);
+    ctx.fillRect(x + 3, y - 6, 1, 2);
+  } else if (it.kind === 'meat') {
+    // kemikli et
+    ctx.fillStyle = '#1a0a08';
+    ctx.fillRect(x - 6, y - 8, 10, 8);
+    ctx.fillStyle = '#9a3424';
+    ctx.fillRect(x - 5, y - 7, 8, 6);
+    ctx.fillStyle = '#c85a40';
+    ctx.fillRect(x - 4, y - 7, 5, 2);
+    ctx.fillStyle = '#e8dcc4';
+    ctx.fillRect(x + 3, y - 5, 4, 2);
+    ctx.fillRect(x + 6, y - 6, 2, 4);
+  } else if (it.kind === 'can') {
+    ctx.fillStyle = '#121418';
+    ctx.fillRect(x - 5, y - 11, 10, 11);
+    ctx.fillStyle = '#7a8088';
+    ctx.fillRect(x - 4, y - 10, 8, 9);
+    ctx.fillStyle = '#b8bec6';
+    ctx.fillRect(x - 4, y - 10, 8, 2);
+    ctx.fillStyle = '#a8402a';
+    ctx.fillRect(x - 4, y - 7, 8, 3);
+    ctx.fillStyle = '#e8c860';
+    ctx.fillRect(x - 1, y - 6, 2, 1);
+  } else if (it.kind === 'torch') {
     // çapraz yatan sönük meşale: sap ve kömürleşmiş bez
     for (let i = 0; i < 14; i++) {
       const px = x - 8 + i, py = y - Math.floor(i / 2);

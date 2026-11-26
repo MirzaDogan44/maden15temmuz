@@ -39,6 +39,8 @@ export class Player {
     this.regenWait = 0;
     /** Dayanıklılık bitince çağrılır */
     this.onExhausted = null;
+    /** Açlık/soğuk yavaşlaması (1 = normal) */
+    this.speedMod = 1;
     /** Elinde meşale var mı? */
     this.hasTorch = false;
     /** Meşale yanıyor mu? (meşale butonuyla söndürülüp yakılır) */
@@ -108,7 +110,7 @@ export class Player {
   /** Taşıma yüküne göre yürüme hızı. */
   get currentSpeed() {
     const carry = Math.max(MIN_CARRY_SPEED, 1 - CARRY_SLOWDOWN * this.cargo.length);
-    return MINER_SPEED * carry * (this.sprinting ? SPRINT_MULT : 1);
+    return MINER_SPEED * carry * (this.sprinting ? SPRINT_MULT : 1) * this.speedMod;
   }
 
   /** (x, y)'deki bir hedefi kazmaya başla. onHit her vuruşta çağrılır. */

@@ -989,3 +989,77 @@ export function playRockBurst(dist = 0, pan = 0) {
     s2.stop(st + 0.08);
   }
 }
+
+// ---------------- Açlık ve soğuk ----------------
+
+/** Yemek yeme: birkaç ıslak çiğneme/çıtırtı. */
+export function playEat() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  for (let k = 0; k < 4; k++) {
+    const st = t + k * 0.17 + rand(0, 0.04);
+    const src = noiseSource(rand(0.9, 1.3));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = rand(900, 1700);
+    bp.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.2, st + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + 0.09);
+    src.connect(bp).connect(g).connect(out(1, 0, 0.15));
+    src.start(st, rand(0, 1.5));
+    src.stop(st + 0.1);
+  }
+}
+
+/** Mide guruldaması: alçak, dalgalanan bir homurtu. */
+export function playStomachGrowl() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(rand(85, 110), t);
+  o.frequency.linearRampToValueAtTime(rand(140, 170), t + 0.35);
+  o.frequency.linearRampToValueAtTime(rand(70, 90), t + 0.8);
+  const am = ctx.createOscillator();
+  am.frequency.value = rand(14, 20);
+  const amg = ctx.createGain();
+  amg.gain.value = 0.5;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 380;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.1);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+  am.connect(amg).connect(g.gain);
+  o.connect(lp).connect(g).connect(out(1, 0, 0.2));
+  o.start(t);
+  am.start(t);
+  o.stop(t + 1);
+  am.stop(t + 1);
+}
+
+/** Diş takırtısı: hızlı, kuru tıkırtılar. */
+export function playTeethChatter() {
+  if (!live()) return;
+  const t = ctx.currentTime;
+  const n = 7 + Math.floor(Math.random() * 5);
+  for (let k = 0; k < n; k++) {
+    const st = t + k * rand(0.045, 0.06);
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = rand(2200, 2800);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.05, st + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + 0.02);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1500;
+    o.connect(hp).connect(g).connect(out(1, 0, 0.1));
+    o.start(st);
+    o.stop(st + 0.03);
+  }
+}
