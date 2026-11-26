@@ -58,7 +58,7 @@ export const SURVIVAL_SPEED = SURVIVAL_FAST ? 5 : 1;
 /** Dolu açlık barı bu kadar saniyede biter. */
 export const HUNGER_TIME = 360;
 /** Koşarken açlık bu kat hızlı azalır. */
-export const HUNGER_RUN_MULT = 1.6;
+export const HUNGER_RUN_MULT = 1.3;
 /** Dolu sıcaklık barı bu kadar saniyede biter. */
 export const COLD_TIME = 240;
 /** Karanlık bölgelerde soğuma bu kat hızlı. */

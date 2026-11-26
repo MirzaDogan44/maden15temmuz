@@ -18,7 +18,7 @@ Sonra http://localhost:8000 adresini aç. Adres parametreleri:
 
 - `?debug`: FPS, ölçek ve Gromm'un durumu/özellikleri görünür
 - `?nolight`: ışığı kapatır (haritayı incelemek için)
-- `?level=3`: 3. bölümden başlar
+- `?level=3`: menüyü atlayıp 3. bölümden başlar (`?level=6` final)
 - `?abilities=duyma,gorme`: Gromm her bölümde bu özelliklerle başlar (duyma, gorme, koklama, hafiza)
 - `?digdebug`: Gromm'un kazma yolu ve çıkış noktası ekranda görünür
 - `?digsoon`: Gromm birkaç saniyede bir kazar
@@ -37,7 +37,9 @@ src/            oyun kodu
   player.js       madenci (yürüme, sprint, kazma, taşıma, meşale)
   gromm.js        Gromm (boyama, davranış, ağırlık hissi)
   ore.js          cevherler
-  items.js        yerdeki eşyalar (meşale, erzak) ve yerleri
+  items.js        yerdeki eşyalar (meşale, erzak, dinamit) ve yerleri
+  save.js         Kaydet ve Çık (localStorage)
+  newspaper.js    gazete görüntüleyici (assets/gazete.png)
   jumpscare.js    yakalanınca ekranı kaplayan Gromm yüzü
   settings.js     oyuncu ayarları (jumpscare vb.)
   ui.js           butonlar ve ayarlar paneli
