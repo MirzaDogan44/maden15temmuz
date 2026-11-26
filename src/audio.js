@@ -4,8 +4,9 @@
 // init() kullanıcı jesti sayılan olaylarda çağrılır (bkz. input.js onGesture).
 //
 // Yapı:
-//   kaynaklar -> (kuru) master -> hoparlör
-//             -> reverbSend -> mağara yankısı (convolver) -> master
+//   efektler -> sfxBus ---------------------------> master -> hoparlör
+//            -> reverbSend -> mağara yankısı -> sfxBus
+//   müzik    -> musicBus (+ kendi yankısı) ----> master
 
 let ctx = null;
 let master = null;
@@ -13,6 +14,11 @@ let reverb = null;
 let reverbSend = null;
 let noiseBuf = null;
 let muted = false;
+/** Ses efektleri ve müzik ayrı kanallardan geçer (ayarlardan ayrı ayrı kapatılabilir). */
+let sfxBus = null;
+let musicBus = null;
+let musicReverb = null;
+const busOn = { sfx: true, music: true };
 
 const MUTE_KEY = 'gromm.muted';
 try {
@@ -36,6 +42,12 @@ export function init() {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 1;
     master.connect(ctx.destination);
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = busOn.sfx ? 1 : 0;
+    sfxBus.connect(master);
+    musicBus = ctx.createGain();
+    musicBus.gain.value = busOn.music ? 1 : 0;
+    musicBus.connect(master);
 
     // Beyaz gürültü (çakıl, taş, rüzgâr gibi seslerin hammaddesi)
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
@@ -56,7 +68,13 @@ export function init() {
     reverb.buffer = ir;
     const wet = ctx.createGain();
     wet.gain.value = 0.55;
-    reverb.connect(wet).connect(master);
+    reverb.connect(wet).connect(sfxBus);
+    // müziğin kendi yankısı (müzik kapanınca kuyruğu da susar)
+    musicReverb = ctx.createConvolver();
+    musicReverb.buffer = ir;
+    const mwet = ctx.createGain();
+    mwet.gain.value = 0.9;
+    musicReverb.connect(mwet).connect(musicBus);
     reverbSend = ctx.createGain();
     reverbSend.gain.value = 1;
     reverbSend.connect(reverb);
@@ -83,6 +101,13 @@ export function setMuted(m) {
   if (master) master.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.02);
 }
 
+/** Müzik / ses efektleri kanalını aç-kapa (ayarlar). */
+export function setBus(name, on) {
+  busOn[name] = on;
+  const bus = name === 'music' ? musicBus : sfxBus;
+  if (bus) bus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05);
+}
+
 export function toggleMute() {
   setMuted(!muted);
   return muted;
@@ -107,7 +132,7 @@ function out(gain, pan = 0, wet = 0) {
     node = p;
     g.__pan = p;
   }
-  node.connect(master);
+  node.connect(sfxBus);
   if (wet > 0) {
     const s = ctx.createGain();
     s.gain.value = wet;
@@ -140,7 +165,7 @@ export function playUiTap() {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(0.12, t + 0.005);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
-  osc.connect(g).connect(master);
+  osc.connect(g).connect(sfxBus);
   osc.start(t);
   osc.stop(t + 0.1);
 }
@@ -196,7 +221,7 @@ export function playStep(run = false) {
   og.gain.setValueAtTime(0.0001, t);
   og.gain.exponentialRampToValueAtTime(run ? 0.12 : 0.06, t + 0.004);
   og.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-  o.connect(og).connect(master);
+  o.connect(og).connect(sfxBus);
   o.start(t);
   o.stop(t + 0.08);
 }
@@ -235,7 +260,7 @@ export function startAmbience() {
   const bus = ctx.createGain();
   bus.gain.setValueAtTime(0.0001, t);
   bus.gain.exponentialRampToValueAtTime(1, t + 3);
-  bus.connect(master);
+  bus.connect(sfxBus);
 
   // Alçak uğultu: iki derin, hafifçe akortsuz ton + çok boğuk gürültü.
   const humGain = ctx.createGain();
@@ -518,7 +543,7 @@ export function playLoad() {
   ng.gain.setValueAtTime(0.0001, t);
   ng.gain.exponentialRampToValueAtTime(0.08, t + 0.002);
   ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-  src.connect(hp).connect(ng).connect(master);
+  src.connect(hp).connect(ng).connect(sfxBus);
   src.start(t, rand(0, 1.5));
   src.stop(t + 0.06);
 }
@@ -580,7 +605,7 @@ export function playElevatorRide() {
     og.gain.setValueAtTime(0.0001, st);
     og.gain.exponentialRampToValueAtTime(0.03 * (1 - k / 10), st + 0.002);
     og.gain.exponentialRampToValueAtTime(0.0001, st + 0.04);
-    o.connect(og).connect(master);
+    o.connect(og).connect(sfxBus);
     o.start(st);
     o.stop(st + 0.05);
   }
@@ -707,7 +732,7 @@ export function playHeartbeat(vol) {
     g.gain.setValueAtTime(0.0001, st);
     g.gain.exponentialRampToValueAtTime(0.5 * vol * k, st + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, st + 0.16);
-    o.connect(g).connect(master);
+    o.connect(g).connect(sfxBus);
     o.start(st);
     o.stop(st + 0.2);
   });
@@ -1123,7 +1148,7 @@ export function playCountdownTick(urgent = false) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(urgent ? 0.09 : 0.05, t + 0.005);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
-  o.connect(g).connect(master);
+  o.connect(g).connect(sfxBus);
   o.start(t);
   o.stop(t + 0.1);
 }
@@ -1156,4 +1181,122 @@ export function playBigExplosion(muffled = false) {
   o.start(t);
   o.stop(t + 3.3);
   for (let k = 0; k < 4; k++) playRockBurst(200 + k * 150, rand(-0.6, 0.6));
+}
+
+// ---------------- Menü müziği ----------------
+//
+// Yavaş, gizemli, hafif ürkütücü: derin bir arka ses (drone), üstünde seyrek
+// ve yankılı minör notalar, arada maden sesleri. Notalar bir zamanlayıcıyla
+// biraz ileriye planlanır; döngü kesintisiz sürer.
+
+let music = null;
+// La minör (doğal) dizisinden yumuşak notalar (Hz)
+const NOTES = [220, 246.94, 261.63, 293.66, 329.63, 349.23, 392, 440, 523.25];
+// Dönen bir motif: her döngüde aynı iskelet, küçük rastgele süslemeler
+const MOTIF = [[4, 0], [2, 3], [1, 5], [0, 7], [-1, 0], [3, 3], [5, 2.5], [4, 4]];
+
+function musicNote(f, t, len, vol) {
+  const o = ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.value = f;
+  const o2 = ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.value = f * 2.001;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  const g2 = ctx.createGain();
+  g2.gain.value = 0.25;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 1400;
+  o.connect(lp);
+  o2.connect(g2).connect(lp);
+  lp.connect(g);
+  g.connect(musicBus);
+  const send = ctx.createGain();
+  send.gain.value = 0.8;
+  g.connect(send).connect(musicReverb);
+  o.start(t);
+  o2.start(t);
+  o.stop(t + len + 0.1);
+  o2.stop(t + len + 0.1);
+}
+
+/** Menü müziğini başlat (zaten çalıyorsa bir şey yapmaz). */
+export function startMenuMusic() {
+  if (!ctx || music) return;
+  const t = ctx.currentTime;
+  const bus = ctx.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.exponentialRampToValueAtTime(1, t + 4);
+  bus.connect(musicBus);
+  // drone: derin, yavaşça nefes alan iki ton
+  const oscs = [];
+  const dg = ctx.createGain();
+  dg.gain.value = 0.09;
+  const dlp = ctx.createBiquadFilter();
+  dlp.type = 'lowpass';
+  dlp.frequency.value = 220;
+  dg.connect(dlp).connect(bus);
+  for (const [f, type] of [[55, 'sawtooth'], [55.4, 'sawtooth'], [82.4, 'sine']]) {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    o.connect(dg);
+    o.start(t);
+    oscs.push(o);
+  }
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 0.05;
+  const lg = ctx.createGain();
+  lg.gain.value = 90;
+  lfo.connect(lg).connect(dlp.frequency);
+  lfo.start(t);
+  oscs.push(lfo);
+  // seyrek notalar: 0.25 sn'de bir ileriye planlama
+  const beat = 1.6;
+  const state = { next: t + 2.5, step: 0, bus };
+  const timer = setInterval(() => {
+    if (!ctx || !music) return;
+    const now = ctx.currentTime;
+    while (state.next < now + 1) {
+      const [deg, gap] = MOTIF[state.step % MOTIF.length];
+      if (deg >= 0) {
+        const f = NOTES[Math.max(0, Math.min(NOTES.length - 1, deg + (Math.random() < 0.15 ? 2 : 0)))];
+        musicNote(f, state.next, 3.2, 0.07);
+        // ara sıra alttan beşli
+        if (state.step % 4 === 0) musicNote(f / 2, state.next + 0.02, 4, 0.04);
+      }
+      state.next += gap * beat * (0.9 + Math.random() * 0.2);
+      state.step++;
+    }
+  }, 250);
+  // arada maden sesleri (efekt kanalından)
+  const fx = setInterval(() => {
+    if (!music) return;
+    const r = Math.random();
+    if (r < 0.4) playDrip();
+    else if (r < 0.55) playCreak();
+    else if (r < 0.65) playThud(700 + Math.random() * 200, Math.random() * 2 - 1);
+  }, 5200);
+  music = { bus, oscs, timer, fx };
+}
+
+/** Menü müziğini yavaşça kıs ve durdur. */
+export function stopMenuMusic(fade = 2) {
+  if (!music) return;
+  const m = music;
+  music = null;
+  clearInterval(m.timer);
+  clearInterval(m.fx);
+  const t = ctx.currentTime;
+  m.bus.gain.cancelScheduledValues(t);
+  m.bus.gain.setValueAtTime(Math.max(0.0001, m.bus.gain.value), t);
+  m.bus.gain.exponentialRampToValueAtTime(0.0001, t + fade);
+  setTimeout(() => {
+    for (const o of m.oscs) o.stop();
+    m.bus.disconnect();
+  }, fade * 1000 + 200);
 }

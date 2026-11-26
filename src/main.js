@@ -11,6 +11,10 @@ import { StartScene } from './scenes/start.js';
 import { PlayScene } from './scenes/play.js';
 import { IntroScene } from './scenes/intro.js';
 import { EndScene } from './scenes/end.js';
+import { MenuScene } from './scenes/menu.js';
+import { DeathScene } from './scenes/death.js';
+import * as save from './save.js';
+import * as settings from './settings.js';
 import { LEVELS } from './levels.js';
 import { shuffledOrder, abilitiesFor, newAbilityFor, START_LEVEL } from './abilities.js';
 
@@ -18,7 +22,10 @@ class Game {
   constructor(canvas) {
     this.screen = new Screen(canvas);
     this.input = new Input(this.screen);
-    this.hud = new Hud(this.screen);
+    this.hud = new Hud(this);
+    // kayıtlı ses ayarları
+    audio.setBus('music', settings.get('music'));
+    audio.setBus('sfx', settings.get('sfx'));
     this.screen.onResize = () => this.hud.layout();
 
     this.shakeAmount = 0;
@@ -73,8 +80,48 @@ class Game {
 
   /** Ana menüye dön. */
   toMenu() {
-    this.scene = new StartScene(this);
-    this.scene.ready = true;
+    audio.stopAmbience();
+    this.hud.close();
+    this.scene = new MenuScene(this);
+  }
+
+  /** Yeni oyun: 1. bölüm (veya ?level=N), yeni özellik sırası; varsa kayıt silinir. */
+  newGame() {
+    save.clear();
+    this.newRun();
+    this.startLevel();
+  }
+
+  /** Kayıttan devam: kayıt yüklendiği anda silinir; bölümün başından başlanır. */
+  continueGame() {
+    const d = save.take();
+    if (!d) return this.newGame();
+    this.run = { order: d.order, time: d.time || 0 };
+    this.startLevel(d.level);
+  }
+
+  /** Duraklatma menüsü: ulaşılan bölümü, özellik sırasını ve toplam süreyi kaydet, menüye dön. */
+  saveAndQuit() {
+    const sc = this.scene;
+    if (this.run && sc instanceof PlayScene) save.write({ level: sc.levelIndex, order: this.run.order, time: this.run.time });
+    if (sc.onLeave) sc.onLeave();
+    this.run = null;
+    this.toMenu();
+  }
+
+  /** Kayıt yapılamıyorsa: ilerleme kaydedilmeden menüye dön. */
+  quitToMenu() {
+    const sc = this.scene;
+    if (sc.onLeave) sc.onLeave();
+    this.run = null;
+    this.toMenu();
+  }
+
+  /** Ölüm: ölüm ekranı, sonra ana menü. Oyun tamamen sıfırlanır. */
+  gameOver(cause, levelIndex) {
+    const time = this.run ? this.run.time : 0;
+    if (this.scene.onLeave) this.scene.onLeave();
+    this.scene = new DeathScene(this, { cause, level: levelIndex, time });
   }
 
   /** Ekranı sarsar. amount: piksel, time: saniye. */
@@ -85,7 +132,10 @@ class Game {
 
   update(dt) {
     // Önce arayüz butonları ve ayarlar paneli; panel açıkken oyun duraklar.
-    const taps = this.input.consumeTaps().filter((t) => !this.hud.handleTap(t));
+    // Oyun içi arayüz (ses, duraklatma) sadece oyun sahnesinde
+    const hudOn = !!this.scene.usesHud;
+    if (!hudOn && this.hud.panelOpen) this.hud.close();
+    const taps = this.input.consumeTaps().filter((t) => !(hudOn && this.hud.handleTap(t)));
     if (!this.hud.panelOpen) this.scene.update(dt, taps);
     this.hud.update(dt);
 
@@ -111,7 +161,7 @@ class Game {
     // kamera kayar, böylece ışık da aynı hizada kalır. Arayüz sarsılmaz.
     this.scene.draw(ctx, w, h);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (!this.scene.hideHud) this.hud.draw(ctx);
+    if (this.scene.usesHud && !this.scene.hideHud) this.hud.draw(ctx);
 
     if (DEBUG) {
       const s = this.screen;

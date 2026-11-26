@@ -1,7 +1,8 @@
 // Oyuncu ayarları (tarayıcıda saklanır; saklanamazsa varsayılan kullanılır).
 
 const KEY = 'gromm.settings';
-const defaults = { jumpscare: true };
+/** music: menü müziği, sfx: ses efektleri, jumpscare: yakalanınca yüz */
+const defaults = { jumpscare: true, music: true, sfx: true };
 let data = { ...defaults };
 try {
   data = { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') };

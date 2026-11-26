@@ -29,8 +29,9 @@ export class StartScene {
     if (this.leaving > 0) {
       this.leaving += dt;
       if (this.leaving > 1.2) {
-        this.game.newRun();
-        this.game.startLevel();
+        // ?level=N ile test: menüyü atlayıp doğrudan o bölümden başla
+        if (new URLSearchParams(location.search).has('level')) this.game.newGame();
+        else this.game.toMenu();
       }
       return;
     }

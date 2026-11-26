@@ -478,8 +478,8 @@ export class PlayScene {
       scare,
       screamed: false,
       // yazı ve yeniden başlama zamanları
-      textAt: scare ? JUMPSCARE.end : 0.6,
-      restartAt: scare ? JUMPSCARE.end + 1.5 : 2.2,
+      textAt: 99,
+      restartAt: scare ? JUMPSCARE.end + 0.3 : 1.6,
     };
     this.player.setDead();
     this.stopDigRumble();
@@ -496,8 +496,25 @@ export class PlayScene {
       c.screamed = true;
       audio.playScream();
     }
-    // Ölünce sadece bu bölüm, açılış ekranı olmadan baştan başlar.
-    if (c.t > c.restartAt) this.game.beginLevel(this.levelIndex);
+    // Ölüm ekranı, sonra ana menü (oyun tamamen sıfırlanır)
+    if (c.t > c.restartAt) this.game.gameOver(c.cause, this.levelIndex);
+  }
+
+  /** Oyun içi arayüz (ses ve duraklatma butonları) bu sahnede görünür. */
+  get usesHud() {
+    return true;
+  }
+
+  /** Duraklatılınca: süren döngüsel sesleri sustur. */
+  onPause() {
+    this.stopDigRumble();
+    this.player.sprinting = false;
+  }
+
+  /** Sahneden çıkılırken (menüye dönüş, ölüm ekranı) sesleri kapat. */
+  onLeave() {
+    this.stopDigRumble();
+    audio.stopAmbience();
   }
 
   /** Madencinin elinde yanan bir meşale var mı? */
@@ -634,6 +651,7 @@ export class PlayScene {
     const dist = Math.hypot(g.x - p.x, g.y - p.y);
     const near = Math.max(0, 1 - dist / 600);
     const warn = d.phase === 'warn' ? d.t / GROMM.digWarn : 0;
+    if (!this.digRumble) this.digRumble = audio.startDigRumble();
     if (this.digRumble) this.digRumble.set(0.12 + 0.75 * near * near + 0.3 * warn, panOf(g.x - p.x), near * 0.6 + warn * 0.4);
     // yakınsa ekran titrer
     const amt = 1.6 * Math.pow(near, 1.5) + warn * 2.5 * near;

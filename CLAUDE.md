@@ -42,7 +42,7 @@ Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak b
 ### Arayüz yerleşimi
 - **Sol üst:** küçük, yarı saydam, pixel art **minimap**. Sadece mağaranın yapısını (yollar), oyuncunun konumunu (yanıp sönen nokta) ve asansörü (belirgin simge) gösterir; karanlık bölgeler daha koyu. Cevherleri, Gromm'u ve şalterleri **göstermez**. Dokunmaları engellemez. Diğer arayüz öğeleri sol üstten uzak tutulur.
 - **Üst orta:** kompakt sayaçlar (asansördeki cevher, taşınan cevher, şalterler) — sadece simge ve sayı.
-- **Sağ üst:** ses ve ayarlar butonları. **Sağ alt:** sprint butonu ve solunda meşale butonu.
+- **Sağ üst:** ses ve duraklatma ("II") butonları. **Sağ alt:** sprint butonu ve solunda meşale butonu.
 
 ---
 
@@ -111,16 +111,22 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - **Yerdeki eşyalar** (`src/items.js`): bölüm başına 3-4 yemek (ekmek, et, konserve) ve 4-5 sönük meşale; bölümün tohumuyla her denemede aynı yerlerde, bir kısmı Gromm'un dolaştığı açık yerlerde. Karanlıkta hafifçe parlarlar. Cevher veya dinamit taşırken de alınabilir.
 - Değerler `src/config.js` içinde (HUNGER_*, COLD_*, WARM_*, FOOD). Test: `?survival=fast` barları 5 kat hızlı azaltır.
 
-### Ölüm
-- Gromm yakalarsa veya açlık/soğuk sıfırlanırsa **bölüm baştan başlar.** Can sistemi yok.
+### Ölüm ve kayıt
+- **Ölüm** (Gromm, açlık, donma, finalde süre bitmesi): varsa jumpscare, sonra ölüm ekranı ("Gromm seni yakaladı" / "Açlıktan bayıldın" / "Dondun" / "Mağara çöktü"), altında "Bölüm 4'e kadar geldin. Süre: 14 dk"; dokununca ana menü (`src/scenes/death.js`). Can sistemi yok.
+- Ölünce oyun **tamamen sıfırlanır**: sonraki oyun 1. bölümden ve yeni bir rastgele özellik sırasıyla başlar; varsa kayıt silinir.
+- **Duraklatma:** oyun içinde sağ üstte "II". Menü: Devam Et, Ayarlar, (Gazeteyi Oku), Kaydet ve Çık. Menü açıkken oyun duraklar.
+- **Kaydet ve Çık** (`src/save.js`, localStorage `gromm.save`): ulaşılan bölüm, Gromm'un özellik sırası ve toplam süre. Bölüm içindeki konum kaydedilmez; kayıt yüklenince o bölümün başından başlanır. Ana menüde "Devam Et"in üstünde "Bölüm 3 · 12 dk".
+- Kayıt **yüklendiği anda silinir**; kayıttan devam edip ölen oyuncu yine 1. bölümden başlar.
+- Kayıt varken "Yeni Oyun": oyunun kendi çizdiği onay kutusu "Kayıtlı oyunun silinecek. Emin misin?" (tarayıcı confirm'i değil).
+- localStorage yoksa oyun çökmez: "Kaydet ve Çık" yerine "Ana Menüye Dön" görünür ve ilerlemenin kaydedilmeyeceği yazar.
 
 ### Jumpscare (Gromm yakalayınca)
 1. Oyun bir an donar (~0.2 sn), ekran kararır.
 2. Ekranı kaplayan, önden görünen büyük bir **Gromm yüzü** belirir: kodla çizilmiş 64x64 pixel art (koyu mor/gri taşımsı deri, parlayan kırmızı gözler, açık ağız, sivri dişler), tam sayı katlarıyla büyütülür (`src/jumpscare.js`).
 3. Yüz hızla yaklaşır (büyür), ekran sert sarsılır, kırmızı flaş olur.
 4. Aynı anda Web Audio ile yüksek, bozuk, kısa bir çığlık/kükreme çalar (`playScream`).
-5. Toplam ~1.25 sn; sonra kararır, "Gromm seni yakaladı" yazısıyla bölüm baştan başlar.
-- **Ayarlar** (sağ üstteki dişli): "Ses: Açık/Kapalı" ve "Jumpscare: Açık/Kapalı". Jumpscare kapalıysa yakalanınca sadece kararma ve yazı olur. Ayarlar tarayıcıda saklanır; panel açıkken oyun duraklar.
+5. Toplam ~1.25 sn; sonra kararır ve ölüm ekranı gelir.
+- **Ayarlar** (ana menüde ve duraklatma menüsünde): "Müzik", "Ses efektleri", "Jumpscare" (Açık/Kapalı). Jumpscare kapalıysa yakalanınca sadece kararma ve ölüm ekranı olur. Ayarlar tarayıcıda saklanır (`src/settings.js`).
 
 ---
 
@@ -185,6 +191,13 @@ Her ses kaynağının bir yarıçapı olsun (küçükten büyüğe): yürüme < 
 
 ---
 
+## Ana menü (`src/scenes/menu.js`)
+- Akış: "Başlamak için dokun" → ana menü (müzik başlar) → Yeni Oyun → bölüm açılış ekranı.
+- Arka planda yavaşça yaşayan karanlık bir maden: titreyen meşale ve dithering'li ışık havuzu, toz, karanlıkta ara sıra yanıp sönen kırmızı gözler, ara sıra hafif sarsıntı ve uzaktan güm sesi.
+- Ortada taş oyma görünümlü pixel art "GROMM" başlığı.
+- Büyük butonlar: Yeni Oyun, Devam Et (sadece kayıt varsa), Ayarlar, Nasıl Oynanır (kısa satırlar ve küçük pixel simgeler).
+- Test: `?level=N` menüyü atlayıp doğrudan o bölümden yeni oyun başlatır.
+
 ## Bölümler
 
 | Bölüm | Cevher | Şalter | Gromm |
@@ -231,7 +244,6 @@ Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
 - Her kuralın solunda kodla çizilmiş küçük, kırmızı gözlü bir Gromm kafası.
 - Altta gri "Devam etmek için dokun." Dokununca derin bir gümbürtüyle bölüm yavaşça aydınlanır.
 - Oyunun kendi pixel yazı tipi (`src/font.js`, Türkçe karakterli). Sığmazsa yazı küçülür.
-- Ölünce açılış ekranı gösterilmez, bölüm doğrudan baştan başlar.
 
 ---
 
@@ -239,7 +251,9 @@ Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
 
 **Bütün sesler kodla, Web Audio API ile üretilecek.** Ses dosyası kullanma. Ayrı bir `audio.js` modülünde, her ses için bir fonksiyon olsun (`playStep()`, `playThud(distance, pan)` gibi).
 
-- **Başlangıç:** Tarayıcılar dokunmadan ses çalmaya izin vermez. Oyun "Başlamak için dokun" ekranıyla açılsın, ses sistemi o dokunuşla başlasın.
+- **Başlangıç:** Tarayıcılar dokunmadan ses çalmaya izin vermez. Oyun "Başlamak için dokun" ekranıyla açılır, ses sistemi o dokunuşla başlar, sonra ana menüye geçilip müzik başlar.
+- **Kanallar:** efektler `sfxBus`, müzik `musicBus` üzerinden (ayarlardan ayrı ayrı kapanır); sağ üstteki ses butonu hepsini susturur.
+- **Menü müziği** (`startMenuMusic`/`stopMenuMusic`): yavaş, gizemli; derin bir drone, üstünde seyrek ve yankılı La minör notalar, arada maden sesleri. Kesintisiz döner; oyun başlayınca yavaşça kısılır, oyun içinde sadece ambiyans kalır.
 - **Madencinin adımları:** Yürürken hafif çakıl sesi, koşarken daha sert ve sık. Her adımda biraz farklı olsun (perde ve ses seviyesi hafif rastgele).
 - **Gromm'un adımları:** Derin, ağır "GÜM" sesleri. Uzaklığa göre ses seviyesi ve boğukluk (low-pass filtre) değişsin. Sağda mı solda mı olduğuna göre stereo kaydırma (pan) yapılsın.
 - **Gromm kazarken:** Yerin altından gelen gümbürtü. Çıkarken patlama gibi bir kaya sesi.
@@ -249,7 +263,7 @@ Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
 - **Gerilim:** Gromm yaklaştıkça hızlanan bir kalp atışı sesi.
 - **Oyun sesleri:** Kazma vuruşu, cevher toplama, asansöre yükleme, şalter "KLANK!", taş "tak!", yemek yeme, meşale çıtırtısı.
 - **Bölüm geçişi:** Derin bir kükreme.
-- Arayüzde bir ses aç/kapa butonu olsun.
+- Oyun içinde sağ üstte bir ses aç/kapa butonu var.
 
 ---
 
@@ -286,7 +300,7 @@ Kurallar:
 3. Tıkla-yürü ve A\* yol bulma.
 4. Karanlık, fener konisi ve meşaleler.
 5. Cevher kazma, taşıma ve yavaşlama. Asansör ve sayaç.
-6. Gromm: dolaşma, yakına gelince kovalama, yakalama ve bölümü baştan başlatma.
+6. Gromm: dolaşma, yakına gelince kovalama, yakalama.
 7. Gromm'un kazma hareketi (çatlaklar, çıkış uyarısı ve efekti).
 8. Arayüz: açlık, sıcaklık ve dayanıklılık barları, cevher sayacı, sprint ve taş butonları.
 9. Açlık/soğuk, erzak sandıkları, meşalede ısınma.
