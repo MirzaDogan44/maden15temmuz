@@ -56,11 +56,11 @@ const SURVIVAL_FAST = new URLSearchParams(location.search).get('survival') === '
 /** ?survival=fast ile barlar 5 kat hızlı azalır (test için). */
 export const SURVIVAL_SPEED = SURVIVAL_FAST ? 5 : 1;
 /** Dolu açlık barı bu kadar saniyede biter. */
-export const HUNGER_TIME = 360;
+export const HUNGER_TIME = 300;
 /** Koşarken açlık bu kat hızlı azalır. */
 export const HUNGER_RUN_MULT = 1.3;
 /** Dolu sıcaklık barı bu kadar saniyede biter. */
-export const COLD_TIME = 240;
+export const COLD_TIME = 200;
 /** Karanlık bölgelerde soğuma bu kat hızlı. */
 export const COLD_DARK_MULT = 1.4;
 /** Duvar meşalesi/lambası yanında boştan doluya ısınma süresi (sn). */

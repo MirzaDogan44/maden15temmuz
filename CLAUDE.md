@@ -44,17 +44,17 @@
 | Şalter indir | Şaltere tıkla. |
 | Yemek ye | Yerdeki yemeğe (ekmek, et, konserve) tıkla. |
 | Meşale al | Yerdeki sönük meşaleye veya karanlık bölge girişindeki meşale standına tıkla. |
-| Elindekini bırak | Sağ alttaki **Bırak butonu** (sprintin solunda). Eli boşken soluk ve basılamaz. |
+| Elindekini bırak | Sağ alttaki **Bırak butonu**. Eli boşken soluk ve basılamaz. |
 | Taş topla | Yerdeki taşa tıkla (en fazla 3). |
 | Taş at | Sağdaki **taş butonuna** bas, sonra hedef noktaya tıkla. |
-| Koş | Sağdaki **sprint butonu**. Mouse ile hem butonu basılı tutup hem başka yere tıklamak mümkün olmadığı için **aç/kapa** şeklinde çalışsın. |
+| Koş | Gidilecek yere (ya da nesneye) **sağ tıkla**: madenci oraya koşarak gider. Dokunmatikte (telefon, akıllı tahta) aynı yere **hızlı çift dokun**. Sol tık / tek dokunma yürür. Sprint butonu yok. |
 
 Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak büyüklükte (en az 44px) olsun.
 
 ### Arayüz yerleşimi
 - **Sol üst:** küçük, yarı saydam, pixel art **minimap**. Sadece mağaranın yapısını (yollar), oyuncunun konumunu (yanıp sönen nokta) ve asansörü (belirgin simge) gösterir; karanlık bölgeler daha koyu. Cevherleri, Gromm'u ve şalterleri **göstermez**. Dokunmaları engellemez. Diğer arayüz öğeleri sol üstten uzak tutulur.
 - **Üst orta:** kompakt sayaçlar (asansördeki cevher, taşınan cevher, şalterler) — sadece simge ve sayı.
-- **Sağ üst:** ses ve duraklatma ("II") butonları. **Sağ alt:** sprint butonu ve solunda Bırak butonu.
+- **Sağ üst:** ses ve duraklatma ("II") butonları. **Sağ alt:** Bırak butonu.
 
 ---
 
@@ -87,14 +87,15 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Şalterler asansörden uzakta ve farklı yönlerde olur; en az biri karanlık bölgededir.
 - 1. bölümde şalter yok, asansör baştan çalışır.
 
-### Sprint
-- Sağ alttaki **sprint butonu** aç/kapa çalışır (en az 48px).
-- Sprint açıkken madenci yürüyüşünün **1.6 katı** hızla koşar (taşıma yavaşlaması bunun üstüne uygulanır). Koşu animasyonu daha hızlı oynar, adımlar daha sert ve sık duyulur.
+### Sprint (koşma)
+- Sprint butonu yok. **Sağ tık** (dokunmatikte aynı yere **hızlı çift dokunma**, `src/input.js`) tıklanan yere koşarak gider; varınca koşu biter. Sol tık / tek dokunma yürür (koşuyu da keser). Nefesi kesikken sağ tık yürür.
+- Koşarken yol işareti turuncu görünür. 1. bölümün başında bir kez ipucu: "Koşmak için sağ tıkla (dokunmatikte çift dokun)."
+- Madenci yürüyüşünün **1.6 katı** hızla koşar (taşıma yavaşlaması bunun üstüne uygulanır). Koşu animasyonu daha hızlı oynar, adımlar daha sert ve sık duyulur.
 - Hızlı koşarsın ama **çok daha fazla ses** çıkarırsın (koşu ses yarıçapı).
 - **Dayanıklılık barı** (madencinin başının üstünde, küçük pixel art bar):
   - Koşarken azalır, dolu bar yaklaşık **4.5 saniyede** biter.
   - Koşmayınca kısa bir beklemeden (~0.9 sn) sonra yavaşça dolar (boştan doluya ~6 sn).
-  - Bitince sprint otomatik kapanır, bar ve buton kırmızı yanıp söner, madenci nefes nefese kalır (ses). Bar **%35**'e dolana kadar tekrar koşulamaz.
+  - Bitince koşu otomatik biter, bar kırmızı yanıp söner, madenci nefes nefese kalır (ses). Bar **%35**'e dolana kadar tekrar koşulamaz.
   - Bar doluyken solup kaybolur; sadece kullanılırken görünür.
 - Koşmak açlığı daha hızlı düşürür.
 - Değerler `src/config.js` içinde (SPRINT_MULT, STAMINA_*).
@@ -120,8 +121,8 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 
 ### Açlık ve soğuk (hafif bir baskı; asıl tehlike Gromm)
 - **Barlar:** Sol üstte, minimap'in hemen altında, aynı genişlikte iki küçük pixel art bar ve simgeleri. Açlık: ekmek simgesi, turuncu-kahverengi. Sıcaklık: alev/kar tanesi simgesi, ısındıkça turuncu, soğudukça buz mavisi. %25'in altında yavaşça yanıp söner. Dokunmayı engellemez.
-- **Açlık:** Dolu bardan sıfıra ~6 dk, koşarken biraz daha hızlı. Yerdeki yemeklere dokununca madenci gidip yer (ekmek +%35, et/konserve +%60), kısa yeme animasyonu ve sesi. Yemek yemek koklama özelliği için 15 sn güçlü iz bırakır. %15'in altında hafif yavaşlama ve ara sıra mide guruldaması. Sıfırsa bayılır (ölüm).
-- **Soğuk:** Sıfıra ~4 dk, karanlık bölgelerde biraz daha hızlı. Duvar meşalesi, lamba veya dolu stand yanında hızla ısınır (küçük sıcaklık parıltıları); elinde ya da yanında yerde yanan bir meşale varken yavaşça ısınır.
+- **Açlık:** Dolu bardan sıfıra ~5 dk, koşarken biraz daha hızlı. Yerdeki yemeklere dokununca madenci gidip yer (ekmek +%35, et/konserve +%60), kısa yeme animasyonu ve sesi. Yemek yemek koklama özelliği için 15 sn güçlü iz bırakır. %15'in altında hafif yavaşlama ve ara sıra mide guruldaması. Sıfırsa bayılır (ölüm).
+- **Soğuk:** Sıfıra ~3.3 dk, karanlık bölgelerde biraz daha hızlı. Duvar meşalesi, lamba veya dolu stand yanında hızla ısınır (küçük sıcaklık parıltıları); elinde ya da yanında yerde yanan bir meşale varken yavaşça ısınır.
   - %50 altı: sprite'a hafif mavi ton. %25 altı: belirgin mavi, sprite titrer, nefesten buhar, ekran kenarlarından buz kristalleri büyür, ara sıra diş takırtısı. %10 altı: neredeyse buz rengi, hareket yavaşlar, ekran kenarları buzla kaplanır. Isınınca hepsi yumuşakça geri gider.
   - Sıfırsa donar (ölüm).
 - **Yerdeki eşyalar** (`src/items.js`): bölüm başına 3-4 yemek (ekmek, et, konserve) ve 4-5 sönük meşale; bölümün tohumuyla her denemede aynı yerlerde, bir kısmı Gromm'un dolaştığı açık yerlerde. Karanlıkta hafifçe parlarlar. Yemek el doluyken de yenir; meşale tek el kuralına uyar.

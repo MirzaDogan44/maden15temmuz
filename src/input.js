@@ -6,6 +6,9 @@
 // bildirilir (ses sistemini ilk dokunuşta başlatmak için gerekli).
 
 const TAP_MAX_MOVE = 12; // CSS piksel
+/** Dokunmatikte çift dokunma (koşmak için): bu süre ve mesafe içinde ikinci dokunuş */
+const DOUBLE_TAP_TIME = 380; // ms
+const DOUBLE_TAP_DIST = 32; // CSS piksel
 
 export class Input {
   constructor(screen) {
@@ -45,8 +48,9 @@ export class Input {
 
   _down(e) {
     e.preventDefault();
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    this._downs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // sol tık: yürü, sağ tık: koş
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+    this._downs.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
     if (this.onPointerDown) this.onPointerDown(e);
   }
 
@@ -60,7 +64,15 @@ export class Input {
     this._downs.delete(e.pointerId);
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_MAX_MOVE) return;
     const p = this.screen.toGame(e.clientX, e.clientY);
-    this.taps.push({ x: p.x, y: p.y, type: e.pointerType });
+    // Koşmak: farede sağ tık, dokunmatikte aynı yere hızlı çift dokunma
+    let run = e.pointerType === 'mouse' && d.button === 2;
+    const now = Date.now();
+    if (e.pointerType !== 'mouse') {
+      const l = this._lastTap;
+      if (l && now - l.t < DOUBLE_TAP_TIME && Math.hypot(e.clientX - l.x, e.clientY - l.y) < DOUBLE_TAP_DIST) run = true;
+      this._lastTap = run ? null : { t: now, x: e.clientX, y: e.clientY };
+    }
+    this.taps.push({ x: p.x, y: p.y, type: e.pointerType, run });
   }
 
   /** Biriken tap'leri alır ve listeyi boşaltır. */

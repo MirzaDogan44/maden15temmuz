@@ -23,7 +23,7 @@ const HOWTO = [
   ['lever', 'Şalterleri indir: asansöre güç gelir.'],
   ['eye', 'Meşalesiz karanlıkta Gromm seni göremez.'],
   ['food', 'Ye ve meşale yanında ısın.'],
-  ['run', "Gromm'dan kaç: sağ alttaki butonla koş."],
+  ['run', "Koşmak için sağ tıkla (dokunmatikte çift dokun)."],
 ];
 const HOWTO_ICONS = {
   tap: [['..#....', '..#....', '..###..', '..####.', '#.####.', '.#####.', '..###..'], '#e6d2a8'],

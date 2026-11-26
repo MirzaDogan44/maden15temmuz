@@ -92,17 +92,9 @@ export class PlayScene {
       audio.playBreath();
       this.toast('Nefesin kesildi!', 1.8);
     };
-    // Sprint butonu (sağ alt, aç/kapa)
-    this.sprintButton = new Button({
-      icon: 'sprint',
-      onTap: () => {
-        if (this.player.dead || this.ending) return;
-        if (!this.player.toggleSprint()) audio.playBreath(0.5);
-        else audio.playUiTap();
-      },
-    });
+    // Koşmak: farede sağ tık, dokunmatikte çift dokunma (sprint butonu yok)
     this.staminaAlpha = 0;
-    // Bırak butonu (sprintin solunda): elindeki eşyayı ayaklarının dibine bırakır
+    // Bırak butonu (sağ alt): elindeki eşyayı ayaklarının dibine bırakır
     this.dropButton = new Button({ icon: 'drop', onTap: () => this.dropHeld() });
     this.dropButton.warn = 0;
 
@@ -1182,6 +1174,7 @@ export class PlayScene {
       const res = findPath(this.map, this.player.x, this.player.y, target.x, target.y);
       if (!res) return;
       this.player.setPath(res.points);
+      this.setRun(tap.run);
       this.pending = target;
       this.marker = { x: target.x, y: target.y, t: 0, exact: true };
       return;
@@ -1189,8 +1182,9 @@ export class PlayScene {
     const res = findPath(this.map, this.player.x, this.player.y, wx, wy);
     if (!res || !res.points.length) return;
     this.player.setPath(res.points);
+    this.setRun(tap.run);
     this.pending = null;
-    this.marker = { x: res.target.x, y: res.target.y, t: 0, exact: res.exact };
+    this.marker = { x: res.target.x, y: res.target.y, t: 0, exact: res.exact, run: !!tap.run };
   }
 
   canAct(tg) {
@@ -1237,11 +1231,6 @@ export class PlayScene {
     // bölüm yavaşça aydınlanarak başlar
     this.fadeIn = Math.min(1, this.fadeIn + dt / 2.2);
     for (const tap of taps) {
-      if (this.sprintButton.contains(tap.x, tap.y)) {
-        this.sprintButton.flash = 0.12;
-        this.sprintButton.onTap();
-        continue;
-      }
       if (this.dropButton.contains(tap.x, tap.y)) {
         // boşken basılamaz (dokunuş haritaya da geçmez)
         if (this.player.handFull) {
@@ -1361,11 +1350,14 @@ export class PlayScene {
     for (const sw of this.switches) if (sw.anim > 0 && sw.anim < 1) sw.anim = Math.min(1, sw.anim + dt / 0.16);
     this.updateElevator(dt);
     // Sprint butonu ve dayanıklılık barının görünürlüğü
-    const sb = this.sprintButton;
-    sb.active = p.sprinting;
-    sb.blocked = p.exhausted;
-    sb.t += dt;
-    sb.flash = Math.max(0, sb.flash - dt);
+    // hedefe varınca koşu biter (her sağ tık / çift dokunma yeni bir koşu)
+    if (p.sprinting && !p.path.length) p.sprinting = false;
+    // 1. bölümde bir kere: nasıl koşulur
+    const hintsR = this.game.run ? (this.game.run.hints ||= {}) : {};
+    if (this.levelIndex === 0 && !hintsR.run && this.t > 5) {
+      hintsR.run = true;
+      this.toast('Koşmak için sağ tıkla (dokunmatikte çift dokun).', 4.5);
+    }
     const tb = this.dropButton;
     tb.active = false;
     tb.dim = !p.handFull;
@@ -1473,8 +1465,7 @@ export class PlayScene {
     this.drawStaminaBar(ctx, camX, camY);
     this.drawTorchTimer(ctx, camX, camY);
     this.drawFrost(ctx, w, h);
-    this.layoutSprintButton(w, h);
-    this.sprintButton.draw(ctx);
+    this.layoutButtons(w, h);
     ctx.globalAlpha = this.player.handFull ? 1 : 0.45;
     this.dropButton.draw(ctx);
     ctx.globalAlpha = 1;
@@ -1681,7 +1672,7 @@ export class PlayScene {
     }
     if (this.countdown !== null && !this.ending && !this.caught) this.drawCountdown(ctx, w);
     // Mesajlar sprint butonunun üstünde kalsın (dar ekranlarda çakışmasın)
-    let y = Math.min(h - 22, this.sprintButton.y - 16);
+    let y = Math.min(h - 22, this.dropButton.y - 16);
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       const t = this.toasts[i];
       const a = Math.min(1, t.t / 0.25, (t.dur - t.t) / 0.5);
@@ -1700,19 +1691,30 @@ export class PlayScene {
     }
   }
 
-  /** Sprint butonu: sağ alt köşe, başparmakla rahat basılacak büyüklükte. */
-  layoutSprintButton(w, h) {
-    const s = Math.round(this.game.screen.buttonSize * 1.3);
+  /** Bırak butonu: sağ alt köşe, başparmakla rahat basılacak büyüklükte. */
+  layoutButtons(w, h) {
+    const s = Math.round(this.game.screen.buttonSize * 1.15);
     const m = Math.max(6, Math.round(s / 4));
-    const b = this.sprintButton;
-    b.size = s;
-    b.x = w - s - m;
-    b.y = h - s - m;
-    // Bırak butonu sprintin solunda, biraz küçük
     const t = this.dropButton;
-    t.size = Math.round(s * 0.85);
-    t.x = b.x - t.size - Math.round(m * 0.8);
-    t.y = h - t.size - m;
+    t.size = s;
+    t.x = w - s - m;
+    t.y = h - s - m;
+  }
+
+  /** Bu dokunuşla koşulsun mu? (sağ tık / çift dokunma) */
+  setRun(run) {
+    const p = this.player;
+    if (!run) {
+      p.sprinting = false;
+      return;
+    }
+    if (p.exhausted) {
+      // nefesi kesik: yürür
+      p.sprinting = false;
+      audio.playBreath(0.5);
+      return;
+    }
+    p.sprinting = true;
   }
 
   /** Elde meşale varken madencinin başının üstünde küçük bir süre göstergesi. */
@@ -2200,7 +2202,7 @@ export class PlayScene {
     const fade = m.done ? Math.max(0, 1 - m.done / 0.5) : 1;
     const p = this.player;
     if (p.path.length) {
-      ctx.fillStyle = 'rgba(232,197,96,0.32)';
+      ctx.fillStyle = m.run && p.sprinting ? 'rgba(255,130,50,0.5)' : 'rgba(232,197,96,0.32)';
       let ax = p.x, ay = p.y;
       let carry = 6;
       for (const q of p.path) {
