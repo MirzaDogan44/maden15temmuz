@@ -11,9 +11,8 @@ const ICONS = {
   gear: ['...###...', '.#.###.#.', '..#####..', '###...###', '###...###', '###...###', '..#####..', '.#.###.#.', '...###...'],
   // şimşek: koşu
   sprint: ['....###', '...###.', '..###..', '.######', '...###.', '..###..', '.###...', '.#.....'],
-  // meşale: yanan / sönük
-  torch: ['....#....', '...##....', '..####...', '..#####..', '...###...', '....#....', '....#....', '....#....', '....#....', '....#....'],
-  torchOff: ['.....#...', '...#.....', '....#....', '.........', '...###...', '....#....', '....#....', '....#....', '....#....', '....#....'],
+  // bırak: aşağı ok ve yer çizgisi
+  drop: ['...###...', '...###...', '...###...', '#########', '.#######.', '..#####..', '...###...', '....#....', '.........', '#########'],
   pause: ['##..##', '##..##', '##..##', '##..##', '##..##', '##..##', '##..##'],
   soundOn: ['...#.....', '..##.#...', '####..#..', '####..#..', '####..#..', '..##.#...', '...#.....'],
   soundOff: ['...#.....', '..##.....', '####.#.#.', '####..#..', '####.#.#.', '..##.....', '...#.....'],
@@ -54,14 +53,17 @@ export class Button {
   draw(ctx) {
     const { x, y, size: s } = this;
     const blink = this.blocked && Math.floor(this.t * 5) % 2 === 0;
-    ctx.fillStyle = this.active ? COLORS.activeEdge : COLORS.edgeDark;
+    // kısa süre parlama (ör. "Elin dolu" uyarısında Bırak butonu)
+    const glow = this.warn > 0 && Math.floor(this.warn * 8) % 2 === 0;
+    const active = this.active || glow;
+    ctx.fillStyle = active ? COLORS.activeEdge : COLORS.edgeDark;
     ctx.fillRect(x, y, s, s);
-    ctx.fillStyle = blink ? COLORS.badFace : this.active ? COLORS.activeFace : this.flash > 0 ? COLORS.faceDown : COLORS.face;
+    ctx.fillStyle = blink ? COLORS.badFace : active ? COLORS.activeFace : this.flash > 0 ? COLORS.faceDown : COLORS.face;
     ctx.fillRect(x + 1, y + 1, s - 2, s - 2);
-    ctx.fillStyle = this.active ? COLORS.activeEdge : COLORS.edgeLight;
+    ctx.fillStyle = active ? COLORS.activeEdge : COLORS.edgeLight;
     ctx.fillRect(x + 1, y + 1, s - 2, 1);
     ctx.fillRect(x + 1, y + 1, 1, s - 2);
-    if (this.active) {
+    if (active) {
       ctx.fillStyle = COLORS.edgeDark;
       ctx.fillRect(x + 2, y + s - 3, s - 4, 1);
     }
@@ -72,7 +74,7 @@ export class Button {
     const ih = icon.length * k;
     const ox = x + Math.floor((s - iw) / 2);
     const oy = y + Math.floor((s - ih) / 2);
-    ctx.fillStyle = this.blocked ? COLORS.badIcon : this.active ? COLORS.activeIcon : this.dim ? '#6a5e50' : COLORS.icon;
+    ctx.fillStyle = this.blocked ? COLORS.badIcon : active ? COLORS.activeIcon : this.dim ? '#6a5e50' : COLORS.icon;
     for (let r = 0; r < icon.length; r++) {
       for (let c = 0; c < icon[r].length; c++) {
         if (icon[r][c] === '#') ctx.fillRect(ox + c * k, oy + r * k, k, k);

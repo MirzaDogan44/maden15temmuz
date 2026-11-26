@@ -255,6 +255,12 @@ export class Lighting {
     return light;
   }
 
+  /** Bir titreyen ışığı tamamen kaldır (ör. yerdeki meşale söndü ya da alındı). */
+  removeStatic(light) {
+    const i = this.statics.indexOf(light);
+    if (i >= 0) this.statics.splice(i, 1);
+  }
+
   resize(w, h) {
     if (w === this.vw && h === this.vh) return;
     this.vw = w;

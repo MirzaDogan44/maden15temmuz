@@ -41,11 +41,10 @@ export class Player {
     this.onExhausted = null;
     /** Açlık/soğuk yavaşlaması (1 = normal) */
     this.speedMod = 1;
-    /** Elinde meşale var mı? */
+    // Tek el kuralı: elde aynı anda sadece bir şey olur (meşale, cevher veya dinamit).
+    /** Elinde yanan bir meşale var mı? */
     this.hasTorch = false;
-    /** Meşale yanıyor mu? (meşale butonuyla söndürülüp yakılır) */
-    this.torchOn = false;
-    /** Meşalenin kalan yanma süresi (sn) */
+    /** Elindeki meşalenin kalan yanma süresi (sn) */
     this.torchTime = 0;
     /** Final: sırtta taşınan dinamit (aynı anda 1) */
     this.dynamite = false;
@@ -60,19 +59,31 @@ export class Player {
 
   /** Elinde yanan bir meşale var mı? */
   get torchLit() {
-    return this.hasTorch && this.torchOn && this.torchTime > 0;
+    return this.hasTorch && this.torchTime > 0;
   }
 
-  /** Yeni (yanan) bir meşale al: süre yenilenir. */
+  /** Eli dolu mu? (meşale, cevher veya dinamit) */
+  get handFull() {
+    return this.hasTorch || this.cargo.length > 0 || this.dynamite;
+  }
+
+  /** Elindeki şey: 'torch' | 'ore' | 'dynamite' | null */
+  get held() {
+    if (this.hasTorch) return 'torch';
+    if (this.cargo.length) return 'ore';
+    if (this.dynamite) return 'dynamite';
+    return null;
+  }
+
+  /** Yanan bir meşale al (kalan süresiyle). */
   takeTorch(time) {
     this.hasTorch = true;
-    this.torchOn = true;
     this.torchTime = time;
   }
 
-  dropTorch() {
+  /** Meşale elden gider (bırakıldı ya da söndü). */
+  clearTorch() {
     this.hasTorch = false;
-    this.torchOn = false;
     this.torchTime = 0;
   }
 
@@ -320,42 +331,16 @@ export class Player {
   drawSack(ctx, camX, camY) {
     const kind = this.cargo[0];
     if (!kind) return;
-    const off = { down: [7, -21], up: [0, -15], left: [8, -16], right: [-8, -16] }[this.dir];
+    // elde taşınır: önde, göğüs hizasında (yukarı bakarken sırtında)
+    const off = { down: [0, -4], up: [0, -14], left: [-6, -6], right: [6, -6] }[this.dir];
     const bob = this.moving && this.frame % 2 ? 1 : 0;
     const x = Math.round(this.x - camX + off[0]) - 5, y = Math.round(this.y - camY + off[1]) - 8 + bob;
-    // taşıma kayışı
-    ctx.fillStyle = '#3a2614';
-    ctx.fillRect(x + 4, y + 7, 2, 3);
-    // kaya
-    ctx.fillStyle = '#141012';
-    ctx.fillRect(x, y + 2, 11, 7);
-    ctx.fillRect(x + 1, y + 1, 9, 9);
-    ctx.fillStyle = '#4a4446';
-    ctx.fillRect(x + 1, y + 2, 9, 6);
-    ctx.fillStyle = '#6a6264';
-    ctx.fillRect(x + 2, y + 2, 5, 2);
-    const pal = {
-      gold: ['#8a5a14', '#ffd04a', '#fff2a0'],
-      crystal: ['#1e5c8a', '#4fb8e8', '#d4f6ff'],
-      ruby: ['#7a1022', '#e0384e', '#ffb0bc'],
-    }[kind];
-    if (kind === 'gold') {
-      for (const [px, py] of [[2, 4], [6, 3], [5, 6], [8, 5]]) {
-        ctx.fillStyle = pal[0];
-        ctx.fillRect(x + px, y + py, 2, 2);
-        ctx.fillStyle = pal[1];
-        ctx.fillRect(x + px, y + py, 1, 1);
-      }
-    } else {
-      // kayadan çıkan iki sivri kristal
-      for (const [px, h] of [[3, 5], [6, 7]]) {
-        ctx.fillStyle = pal[0];
-        ctx.fillRect(x + px - 1, y + 3 - h, 3, h);
-        ctx.fillStyle = pal[1];
-        ctx.fillRect(x + px, y + 3 - h, 1, h);
-        ctx.fillStyle = pal[2];
-        ctx.fillRect(x + px, y + 3 - h, 1, 1);
-      }
+    drawOreChunk(ctx, kind, x, y);
+    // tutan eller
+    ctx.fillStyle = '#e0a070';
+    if (this.dir !== 'up') {
+      ctx.fillRect(x - 1, y + 5, 2, 2);
+      ctx.fillRect(x + 10, y + 5, 2, 2);
     }
   }
 
@@ -367,7 +352,7 @@ export class Player {
       drawMiner(ctx, 'death', 'down', this.deadTime, x, y);
       return;
     }
-    const sackBehind = this.cargo.length && this.dir !== 'up';
+    const sackBehind = this.cargo.length && this.dir === 'up';
     const pickBehind = this.dig && this.dir === 'up';
     if (sackBehind) this.drawSack(ctx, camX, camY);
     if (pickBehind) this.drawPickaxe(ctx, camX, camY);
@@ -395,4 +380,38 @@ function easeOut(t) {
 }
 function easeIn(t) {
   return t * t * t;
+}
+
+/** Cevher parçası (sırtta ya da yerde). (x, y) sol üst köşe. */
+export function drawOreChunk(ctx, kind, x, y) {
+  ctx.fillStyle = '#141012';
+  ctx.fillRect(x, y + 2, 11, 7);
+  ctx.fillRect(x + 1, y + 1, 9, 9);
+  ctx.fillStyle = '#4a4446';
+  ctx.fillRect(x + 1, y + 2, 9, 6);
+  ctx.fillStyle = '#6a6264';
+  ctx.fillRect(x + 2, y + 2, 5, 2);
+  const pal = {
+    gold: ['#8a5a14', '#ffd04a', '#fff2a0'],
+    crystal: ['#1e5c8a', '#4fb8e8', '#d4f6ff'],
+    ruby: ['#7a1022', '#e0384e', '#ffb0bc'],
+  }[kind];
+  if (kind === 'gold') {
+    for (const [px, py] of [[2, 4], [6, 3], [5, 6], [8, 5]]) {
+      ctx.fillStyle = pal[0];
+      ctx.fillRect(x + px, y + py, 2, 2);
+      ctx.fillStyle = pal[1];
+      ctx.fillRect(x + px, y + py, 1, 1);
+    }
+  } else {
+    // kayadan çıkan iki sivri kristal
+    for (const [px, h] of [[3, 5], [6, 7]]) {
+      ctx.fillStyle = pal[0];
+      ctx.fillRect(x + px - 1, y + 3 - h, 3, h);
+      ctx.fillStyle = pal[1];
+      ctx.fillRect(x + px, y + 3 - h, 1, h);
+      ctx.fillStyle = pal[2];
+      ctx.fillRect(x + px, y + 3 - h, 1, 1);
+    }
+  }
 }

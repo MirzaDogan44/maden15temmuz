@@ -179,7 +179,9 @@ export class Gromm {
     this.abilities = new Set();
     this.levelIndex = 0;
     /** Oyun sahnesinin her karede doldurduğu algı bilgisi */
-    this.senses = { noises: [], hidden: false, torchLit: false, trail: [], elevator: null, time: 0 };
+    this.senses = { noises: [], hidden: false, torchLit: false, lights: [], trail: [], elevator: null, time: 0 };
+    /** Görme: baktığı yer meşaleleri (aynı meşaleye iki kere gitmez) */
+    this.checkedLights = new Set();
     /** Hafıza: madencinin görüldüğü son yerler (en yenisi başta) */
     this.memory = [];
     this.patrolIndex = 0;
@@ -267,6 +269,23 @@ export class Gromm {
     this.goTo(map, best.x, best.y);
     if (this.onHear) this.onHear(best);
     return true;
+  }
+
+  /** Görme: yerde yanan bir meşalenin ışığını uzaktan fark eder ve oraya gider (yem). */
+  seeLight(map) {
+    if (!this.has('gorme')) return false;
+    for (const L of this.senses.lights || []) {
+      if (this.checkedLights.has(L.id)) continue;
+      if (Math.hypot(L.x - this.x, L.y - this.y) > GROMM.torchSight) continue;
+      if (map.rayBlocked(this.x, this.y - 10, L.x, L.y - 8)) continue;
+      this.checkedLights.add(L.id);
+      this.setState('search');
+      this.lastSeen = { x: L.x, y: L.y };
+      this.goTo(map, L.x, L.y);
+      if (this.onHear) this.onHear(L);
+      return true;
+    }
+    return false;
   }
 
   /** Koklama: yakındaki izin daha taze bir noktasını bul. */
@@ -359,6 +378,7 @@ export class Gromm {
     else if (calm && alive) {
       if (this.perceives(player, map, false)) this.startChase(player);
       else if (this.hear(map)) { /* sese yöneldi */ }
+      else if (this.state !== 'search' && this.seeLight(map)) { /* yerdeki meşalenin ışığına gidiyor */ }
       else if ((this.state === 'idle' || this.state === 'wander' || this.state === 'look') && this.smell(map, dt)) { /* ize düştü */ }
     }
 

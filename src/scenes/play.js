@@ -22,16 +22,21 @@ import { EndScene } from './end.js';
 import { makeRng } from '../rng.js';
 import { CompleteScene } from './complete.js';
 import { Lighting, TORCH, LAMP, HAND_TORCH, SELF_GLOW } from '../lighting.js';
-import { Player } from '../player.js';
+import { Player, drawOreChunk } from '../player.js';
 import { findPath } from '../pathfinding.js';
 import { Particles } from '../particles.js';
-import { drawText, textWidth } from '../font.js';
+import { drawText, textWidth, wrapText } from '../font.js';
 import { Button } from '../ui.js';
 import { Minimap } from '../minimap.js';
 import * as audio from '../audio.js';
 
 const NO_LIGHT = new URLSearchParams(location.search).has('nolight');
-const NO_LIGHT_HIDE = false;
+/** Bu mesafede yanan bir yer meşalesi varken karanlıkta saklanılamaz (px). */
+const HIDE_TORCH_RANGE = 110;
+/** Yere bırakılmış yanan meşalenin ışığı. */
+const GROUND_TORCH = { color: [1.0, 0.6, 0.28], radius: 112, intensity: 1.05, falloff: 1.15, applyDark: false };
+/** Yerdeki cevher parçalarının hafif ışığı. */
+const ORE_GLOW = { gold: [1, 0.85, 0.3], crystal: [0.5, 0.85, 1], ruby: [1, 0.35, 0.45] };
 /** Final: dinamit kurma süresi (sn) ve geri sayım (sn) */
 const ARM_TIME = 3;
 const FINAL_COUNTDOWN = 60;
@@ -97,11 +102,9 @@ export class PlayScene {
       },
     });
     this.staminaAlpha = 0;
-    // Meşale butonu (sprintin solunda): elindeki meşaleyi söndürür/yakar
-    this.torchButton = new Button({
-      icon: () => (this.player.torchLit ? 'torch' : 'torchOff'),
-      onTap: () => this.toggleTorch(),
-    });
+    // Bırak butonu (sprintin solunda): elindeki eşyayı ayaklarının dibine bırakır
+    this.dropButton = new Button({ icon: 'drop', onTap: () => this.dropHeld() });
+    this.dropButton.warn = 0;
 
     // ---- Işıklar ----
     const L = (this.lighting = new Lighting(this.map));
@@ -146,17 +149,11 @@ export class PlayScene {
       { kind: 'torch', count: 4 + (this.level.seed % 2), darkBias: 0.3 },
       { kind: 'food', count: 3 + ((this.level.seed >> 1) % 2), darkBias: 0.15 },
       ...(this.map.blasts.length ? [{ kind: 'dynamite', count: this.map.blasts.length + 1, darkBias: 0.35 }] : []),
-    ]).map((it) => ({
-      ...it,
-      kind: it.kind === 'food' ? foodKinds[Math.floor(irng() * 3)] : it.kind,
-      taken: false,
-      phase: Math.random() * 10,
-      // karanlıkta da fark edilsin diye çok hafif bir ışık
-      light: L.addStatic({
-        x: it.x + 3, y: it.y - 6, radius: 22, intensity: 0.35, falloff: 1.3, applyDark: false,
-        color: it.kind === 'torch' ? [1, 0.5, 0.2] : it.kind === 'dynamite' ? [1, 0.3, 0.2] : [1, 0.85, 0.5],
-      }),
-    }));
+    ]).map((it) => this.makeItem({ ...it, kind: it.kind === 'food' ? foodKinds[Math.floor(irng() * 3)] : it.kind }));
+    /** Yerdeki eşyalara verilen kimlik (Gromm aynı meşaleye iki kere bakmasın diye) */
+    this.itemSeq = 0;
+    /** Sönmüş meşalelerden kalan kararmış çubuklar */
+    this.burnt = [];
     // Hikâye girişi: yeni oyunda 1. bölümde, başlangıcın birkaç adım yakınında gazete
     const run = game.run;
     if (levelIndex === 0 && run && run.fresh && !run.newspaper) {
@@ -263,17 +260,7 @@ export class PlayScene {
         act: () => this.takeTorch(st),
       });
     }
-    for (const it of this.items) {
-      this.targets.push({
-        kind: 'item',
-        obj: it,
-        x: it.x,
-        y: it.y,
-        box: { x0: it.x - 14, y0: it.y - 16, x1: it.x + 14, y1: it.y + 10 },
-        reach: 20,
-        act: () => this.pickItem(it),
-      });
-    }
+    for (const it of this.items) this.addItemTarget(it);
     for (const ore of this.ores) {
       this.targets.push({
         kind: 'ore',
@@ -352,6 +339,7 @@ export class PlayScene {
       const tip = this.player.torchTip();
       out.push({ kind: 'hand', x: tip.x, y: tip.y, radius: HAND_TORCH.radius });
     }
+    for (const it of this.groundTorches) out.push({ kind: 'ground', x: it.x, y: it.y, radius: GROUND_TORCH.radius });
     return out;
   }
 
@@ -360,23 +348,15 @@ export class PlayScene {
     this.toasts.push({ text, t: 0, dur });
   }
 
-  /**
-   * Standdan meşale al (süre yenilenir); elinde meşale varken boş standa
-   * dokunursan meşaleyi geri bırakır.
-   */
+  /** Standdan meşale al: madenci alır ve yakar (eli boşsa). */
   takeTorch(st) {
     const p = this.player;
     if (!st.hasTorch) {
-      if (p.hasTorch) {
-        st.hasTorch = true;
-        p.dropTorch();
-        audio.playTorchPickup();
-        this.toast('Meşaleyi standa bıraktın.');
-      }
+      this.toast('Stand boş.');
       return;
     }
-    if (p.torchLit && p.torchTime > TORCH_BURN_TIME - 5) {
-      this.toast('Elindeki meşale zaten yeni.');
+    if (p.handFull) {
+      this.handFullWarning();
       return;
     }
     st.hasTorch = false;
@@ -387,10 +367,147 @@ export class PlayScene {
     for (let k = 0; k < 8; k++) this.particles.spawnEmber(st.x, st.y);
   }
 
+  // ---------------- Elde taşıma (tek el) ----------------
+
+  /** Yerdeki bir eşyayı oluştur (ışığıyla birlikte). */
+  makeItem(it) {
+    const L = this.lighting;
+    const o = { taken: false, phase: Math.random() * 10, ...it };
+    if (o.kind === 'torch') {
+      o.time = o.time ?? TORCH_BURN_TIME;
+      o.lit = !!o.lit;
+    }
+    if (o.kind === 'torch' && o.lit) {
+      // yere bırakılmış yanan meşale: gölgeli, titreyen bir ışık havuzu
+      o.light = L.addStatic({ x: o.x + 5, y: o.y - 10, ox: o.x, oy: o.y - 4, ...GROUND_TORCH });
+      Object.assign(o, flickerState());
+    } else {
+      // karanlıkta da fark edilsin diye çok hafif bir ışık
+      const col = { torch: [1, 0.5, 0.2], dynamite: [1, 0.3, 0.2], oreChunk: o.ore ? ORE_GLOW[o.ore] : [1, 1, 1] }[o.kind] || [1, 0.85, 0.5];
+      o.light = L.addStatic({ x: o.x + 3, y: o.y - 6, radius: 22, intensity: 0.35, falloff: 1.3, applyDark: false, color: col });
+    }
+    return o;
+  }
+
+  addItemTarget(it) {
+    this.targets.push({
+      kind: 'item',
+      obj: it,
+      x: it.x,
+      y: it.y,
+      box: { x0: it.x - 14, y0: it.y - 16, x1: it.x + 14, y1: it.y + 10 },
+      reach: 20,
+      act: () => this.pickItem(it),
+    });
+  }
+
+  /** Eşya yerden kalkar: ışığı ve dokunma alanı gider. */
+  removeItem(it) {
+    it.taken = true;
+    if (it.light) this.lighting.removeStatic(it.light);
+    it.light = null;
+    const i = this.targets.findIndex((t) => t.obj === it);
+    if (i >= 0) this.targets.splice(i, 1);
+    this.items = this.items.filter((x) => x !== it);
+  }
+
+  /** Taşınabilir eşya mı? (eli doluyken alınamaz) */
+  isCarryable(it) {
+    return it.kind === 'torch' || it.kind === 'dynamite' || it.kind === 'oreChunk';
+  }
+
+  /** "Elin dolu" uyarısı ve Bırak butonunun kısa parlaması. */
+  handFullWarning() {
+    this.toast('Elin dolu, önce bırak.', 2);
+    this.dropButton.warn = 1.2;
+    audio.playUiTap();
+  }
+
+  /** Bırak: elindeki eşyayı ayaklarının dibine bırakır. */
+  dropHeld() {
+    const p = this.player;
+    if (p.dead || this.ending || !p.handFull) return;
+    if (this.arming) {
+      this.arming = null;
+      p.stopDig();
+    }
+    if (p.dig) p.stopDig();
+    const x = p.x + (p.dir === 'left' ? -6 : p.dir === 'right' ? 6 : 0), y = p.y + 3;
+    const id = ++this.itemSeq;
+    if (p.hasTorch) {
+      // yere bırakılan meşale yanmaya devam eder
+      const it = this.makeItem({ kind: 'torch', x, y, tx: Math.floor(x / TILE), ty: Math.floor(y / TILE), lit: true, time: p.torchTime, id });
+      p.clearTorch();
+      this.items.push(it);
+      this.addItemTarget(it);
+      audio.playTorchCrackle(0.8, 0);
+      this.toast('Meşaleyi bıraktın. Yerde yanmaya devam ediyor.', 2.4);
+    } else if (p.cargo.length) {
+      const it = this.makeItem({ kind: 'oreChunk', ore: p.cargo.pop(), x, y, tx: Math.floor(x / TILE), ty: Math.floor(y / TILE), id });
+      this.items.push(it);
+      this.addItemTarget(it);
+      audio.playPickHit();
+      this.toast('Cevheri bıraktın.', 1.6);
+    } else if (p.dynamite) {
+      p.dynamite = false;
+      const it = this.makeItem({ kind: 'dynamite', x, y, tx: Math.floor(x / TILE), ty: Math.floor(y / TILE), id });
+      this.items.push(it);
+      this.addItemTarget(it);
+      audio.playArmTick();
+      this.toast('Dinamiti bıraktın.', 1.6);
+    }
+    this.particles.spawnPuff(x, y, 3, 8);
+  }
+
+  /** Yerde yanan meşaleler. */
+  get groundTorches() {
+    return this.items.filter((it) => it.kind === 'torch' && it.lit && !it.taken);
+  }
+
+  /** (x, y)'ye r içinde yanan bir yer meşalesi var mı? */
+  litTorchNear(x, y, r) {
+    for (const it of this.items) if (it.kind === 'torch' && it.lit && Math.hypot(it.x - x, it.y - y) < r) return true;
+    return false;
+  }
+
+  /** Yerdeki meşaleler yanar, sonunda söner ve yok olur. */
+  updateGroundTorches(dt) {
+    for (const it of this.groundTorches) {
+      it.time -= dt;
+      let f = stepFlicker(it, dt, this.t);
+      const low = Math.max(0, 1 - it.time / TORCH_LOW_TIME);
+      if (low > 0) f *= 1 - low * (0.45 + 0.35 * Math.random());
+      it.low = low;
+      it.light.flicker = Math.max(0, f);
+      it.emberTimer -= dt;
+      if (it.emberTimer <= 0) {
+        it.emberTimer = 0.15 + Math.random() * 0.5;
+        this.particles.spawnEmber(it.x + 5, it.y - 12);
+      }
+      if (it.time <= 0) this.burnOut(it.x, it.y, it);
+    }
+    for (const b of this.burnt) b.t += dt;
+    this.burnt = this.burnt.filter((b) => b.t < 9);
+  }
+
+  /** Meşale söndü: duman ve kısa süre kalan kararmış bir çubuk. */
+  burnOut(x, y, item) {
+    if (item) this.removeItem(item);
+    this.burnt.push({ x, y, t: 0 });
+    this.particles.spawnPuff(x + 4, y - 8, 6, 8);
+    const p = this.player;
+    if (Math.hypot(x - p.x, y - p.y) < 300) audio.playTorchOut();
+  }
+
   /** Yerdeki eşyayı al (cevher taşırken de alınabilir). */
   pickItem(it) {
     if (it.taken) return;
     const p = this.player;
+    // tek el kuralı: eli doluyken taşınabilir bir şey alınamaz (yemek hemen yenir)
+    if (this.isCarryable(it) && p.handFull) {
+      this.handFullWarning();
+      return;
+    }
     if (it.kind === 'newspaper') {
       // eğilip alır, kâğıt hışırdar, sonra gazete açılır
       it.taken = true;
@@ -410,11 +527,13 @@ export class PlayScene {
       audio.playEat();
       this.toast({ bread: 'Ekmek yedin.', meat: 'Et yedin.', can: 'Konserve yedin.' }[it.kind]);
     }
+    if (it.kind === 'oreChunk') {
+      it.taken = true;
+      p.cargo.push(it.ore);
+      audio.playOrePickup(it.ore);
+      this.toast('Cevheri aldın. Asansöre götür!', 2);
+    }
     if (it.kind === 'dynamite') {
-      if (p.dynamite) {
-        this.toast('Aynı anda sadece bir dinamit taşıyabilirsin.');
-        return;
-      }
       it.taken = true;
       p.dynamite = true;
       audio.playArmTick();
@@ -422,15 +541,14 @@ export class PlayScene {
     }
     if (it.kind === 'torch') {
       it.taken = true;
-      p.takeTorch(TORCH_BURN_TIME);
+      // yerde yanan meşale kalan süresiyle, sönük meşale tam süreyle yanar
+      p.takeTorch(it.lit ? it.time : TORCH_BURN_TIME);
       audio.playTorchPickup();
-      this.toast(p.hasTorch ? 'Meşaleyi yaktın.' : 'Meşaleyi aldın.');
+      this.toast(it.lit ? 'Meşaleyi aldın.' : 'Meşaleyi aldın ve yaktın.');
       for (let k = 0; k < 10; k++) this.particles.spawnEmber(it.x, it.y - 8);
     }
     if (!it.taken) return;
-    it.light.flicker = 0;
-    const tg = this.targets.find((t) => t.obj === it);
-    if (tg) tg.disabled = true;
+    this.removeItem(it);
   }
 
   /** Başlangıcın 2-4 adım yakınında açık bir zemin karesi. */
@@ -457,27 +575,6 @@ export class PlayScene {
     newspaper.open(() => {
       this.paperOpen = false;
     });
-  }
-
-  /** Meşale butonu: elindeki meşaleyi söndür/yak. */
-  toggleTorch() {
-    const p = this.player;
-    if (p.dead || this.ending) return;
-    if (!p.hasTorch) {
-      this.toast('Elinde meşale yok. Yerdeki meşalelerden al.');
-      audio.playUiTap();
-      return;
-    }
-    p.torchOn = !p.torchOn;
-    if (p.torchOn) {
-      audio.playTorchPickup();
-      const tip = p.torchTip();
-      for (let k = 0; k < 6; k++) this.particles.spawnEmber(tip.x, tip.y - 2);
-    } else {
-      audio.playTorchOut();
-      const tip = p.torchTip();
-      this.particles.spawnPuff(tip.x, tip.y - 2, 3, 6);
-    }
   }
 
   /** Gromm'un ileride duyabileceği bir ses olayı. */
@@ -570,10 +667,10 @@ export class PlayScene {
     return this.player.torchLit;
   }
 
-  /** Madenci karanlık bölgede ve meşalesi sönük: Gromm onu göremez. */
+  /** Madenci karanlık bölgede ve yakınında yanan meşale yok (elinde ya da yerde): Gromm onu göremez. */
   get playerHidden() {
     const p = this.player;
-    return !p.torchLit && !NO_LIGHT_HIDE && this.lighting.darkAt(p.x, p.y - 8) > 0.5;
+    return !p.torchLit && !this.litTorchNear(p.x, p.y, HIDE_TORCH_RANGE) && this.lighting.darkAt(p.x, p.y - 8) > 0.5;
   }
 
   /** Jumpscare yüzü ekrandayken ses/ayar butonları gizlenir. */
@@ -605,6 +702,8 @@ export class PlayScene {
       // karanlık bölgede meşalesi sönük madenci görülemez
       torchLit: this.torchLit,
       hidden: this.playerHidden,
+      // görme: yerde yanan meşalelerin ışığı (yem olarak kullanılabilir)
+      lights: this.groundTorches.map((it) => ({ id: it.id, x: it.x, y: it.y })),
       trail: this.trail,
       elevator: { x: (el.x0 + el.x1) / 2, y: el.y1 + 48 },
       elevatorBox: el,
@@ -873,11 +972,10 @@ export class PlayScene {
 
   // ---------------- Cevher ----------------
 
-  /** Elinde zaten cevher varsa yenisini kazamaz. */
+  /** Kazmak iki el ister: elinde bir şey varsa kazamaz. */
   carryFull() {
-    if (this.player.carried < MAX_CARRY) return false;
-    this.toast('Önce bunu asansöre götür.', 2.2);
-    audio.playUiTap();
+    if (!this.player.handFull) return false;
+    this.handFullWarning();
     return true;
   }
 
@@ -1065,8 +1163,16 @@ export class PlayScene {
     // Önce dokunulabilen bir nesneye mi dokunuldu?
     const target = this.targets.find((tg) => !tg.disabled && wx >= tg.box.x0 && wx <= tg.box.x1 && wy >= tg.box.y0 && wy <= tg.box.y1);
     if (target) {
-      // Elinde cevher varken başka cevhere gitme bile, hemen uyar.
+      // Eli doluyken kazmaya ya da taşınabilir bir şey almaya gitme bile, hemen uyar.
       if (target.kind === 'ore' && this.carryFull()) return;
+      if (target.kind === 'item' && this.isCarryable(target.obj) && this.player.handFull) {
+        this.handFullWarning();
+        return;
+      }
+      if (target.kind === 'stand' && target.obj.hasTorch && this.player.handFull) {
+        this.handFullWarning();
+        return;
+      }
       if (this.canAct(target)) {
         this.player.stop();
         this.pending = null;
@@ -1136,9 +1242,12 @@ export class PlayScene {
         this.sprintButton.onTap();
         continue;
       }
-      if (this.torchButton.contains(tap.x, tap.y)) {
-        this.torchButton.flash = 0.12;
-        this.torchButton.onTap();
+      if (this.dropButton.contains(tap.x, tap.y)) {
+        // boşken basılamaz (dokunuş haritaya da geçmez)
+        if (this.player.handFull) {
+          this.dropButton.flash = 0.12;
+          this.dropButton.onTap();
+        }
         continue;
       }
       this.handleTap(tap);
@@ -1176,9 +1285,8 @@ export class PlayScene {
     if (p.torchLit && !this.ending) {
       p.torchTime = Math.max(0, p.torchTime - dt);
       if (p.torchTime <= 0) {
-        p.dropTorch();
-        audio.playTorchOut();
-        this.particles.spawnPuff(p.x, p.y - 20, 4, 8);
+        p.clearTorch();
+        this.burnOut(p.x + 4, p.y + 3, null);
         this.toast('Meşalen söndü.');
       } else if (p.torchTime < TORCH_LOW_TIME && !this.torchLowWarned) {
         this.torchLowWarned = true;
@@ -1199,6 +1307,7 @@ export class PlayScene {
     this.selfGlow.x = p.x;
     this.selfGlow.y = p.y - 6;
 
+    this.updateGroundTorches(dt);
     // Kıvılcımlar ve çıtırtı
     const flames = [...this.torches, ...this.stands.filter((st) => st.hasTorch)];
     for (const tr of flames) {
@@ -1223,15 +1332,21 @@ export class PlayScene {
 
     // Karanlık bölge ipuçları
     this.darkHintCooldown -= dt;
-    if (!p.hasTorch && this.lighting.darkAt(p.x, p.y) > 0.6 && this.darkHintCooldown <= 0) {
-      this.toast("Zifiri karanlık... Bir meşale bul ya da standdan al.", 3.5);
-      this.darkHintCooldown = 10;
+    const hints = this.game.run ? (this.game.run.hints ||= {}) : {};
+    if (!this.darkHinted && !p.torchLit && this.lighting.darkAt(p.x, p.y) > 0.6 && !this.litTorchNear(p.x, p.y, 120)) {
+      this.darkHinted = true;
+      this.toast('Zifiri karanlık... Bir meşale bul ya da standdan al.', 3.5);
     }
     // 1. bölümde karanlık bir girişin yanında bir kere: saklanma ipucu
-    const hints = this.game.run ? (this.game.run.hints ||= {}) : {};
     if (this.levelIndex === 0 && !hints.hide && this.fadeIn >= 1 && this.lighting.darkAt(p.x, p.y) > 0.15) {
       hints.hide = true;
-      this.toast('Karanlıkta meşaleni söndür. Gromm seni göremez.', 5);
+      this.toast('Meşaleni bırak ve karanlığa saklan. Gromm seni göremez.', 5);
+    }
+    // karanlıkta meşaleyle bir cevhere yaklaşınca bir kere: kazma ipucu
+    if (!hints.digDrop && p.hasTorch && this.lighting.darkAt(p.x, p.y) > 0.3 && this.ores.some((o) => !o.broken && Math.hypot(o.x - p.x, o.y - p.y) < 3 * TILE)) {
+      hints.digDrop = true;
+      this.toast('Kazmak için meşaleyi bırak.', 4);
+      this.dropButton.warn = 1.6;
     }
 
     this.updateSurvival(dt);
@@ -1251,11 +1366,12 @@ export class PlayScene {
     sb.blocked = p.exhausted;
     sb.t += dt;
     sb.flash = Math.max(0, sb.flash - dt);
-    const tb = this.torchButton;
-    tb.active = p.torchLit;
-    tb.dim = !p.hasTorch;
+    const tb = this.dropButton;
+    tb.active = false;
+    tb.dim = !p.handFull;
     tb.t += dt;
     tb.flash = Math.max(0, tb.flash - dt);
+    tb.warn = Math.max(0, tb.warn - dt);
     const showBar = p.stamina < 0.999 || p.sprinting;
     this.staminaAlpha = showBar ? Math.min(1, this.staminaAlpha + dt * 6) : Math.max(0, this.staminaAlpha - dt * 1.5);
     for (const n of this.noises) n.t += dt;
@@ -1284,7 +1400,15 @@ export class PlayScene {
       if (it.taken) continue;
       const x = it.x - camX, y = it.y - camY;
       if (x < -20 || y < -20 || x > this.scene.width + 20 || y > this.scene.height + 20) continue;
-      list.push({ y: it.y - 4, draw: () => (it.kind === 'dynamite' ? this.drawDynamite(sc, x, y - 8, 1) : drawItem(sc, it, x, y)) });
+      list.push({
+        y: it.y - 4,
+        draw: () => (it.kind === 'dynamite' ? this.drawDynamite(sc, x, y - 8, 1) : it.kind === 'oreChunk' ? drawOreChunk(sc, it.ore, Math.round(x) - 5, Math.round(y) - 10) : drawItem(sc, it, x, y)),
+      });
+    }
+    for (const b of this.burnt) {
+      const x = b.x - camX, y = b.y - camY;
+      if (x < -20 || y < -20 || x > this.scene.width + 20 || y > this.scene.height + 20) continue;
+      list.push({ y: b.y - 6, draw: () => drawBurnt(sc, x, y, Math.min(1, (9 - b.t) / 3)) });
     }
     for (const sw of this.switches) list.push({ y: (sw.ty + 1) * TILE - 1, draw: () => drawSwitch(sc, sw, camX, camY) });
     for (const b of this.blasts) list.push({ y: (b.ty + 1) * TILE - 1, draw: () => this.drawBlast(sc, b, camX, camY) });
@@ -1351,7 +1475,9 @@ export class PlayScene {
     this.drawFrost(ctx, w, h);
     this.layoutSprintButton(w, h);
     this.sprintButton.draw(ctx);
-    this.torchButton.draw(ctx);
+    ctx.globalAlpha = this.player.handFull ? 1 : 0.45;
+    this.dropButton.draw(ctx);
+    ctx.globalAlpha = 1;
     this.drawOverlay(ctx, w, h);
 
     if (this.fadeIn < 1 && !this.caught) {
@@ -1374,17 +1500,26 @@ export class PlayScene {
       const tip = this.player.torchTip();
       const ht = this.handTorch;
       drawFlame(ctx, tip.x - camX, tip.y - camY, this.t, ht.phase, ht.flick * (1 - (ht.low || 0) * 0.5), 0.85 * (1 - (ht.low || 0) * 0.3));
-    } else if (this.player.hasTorch) {
-      // sönük meşale: için için yanan bir kor
-      const tip = this.player.torchTip();
-      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.t * 3);
-      ctx.fillStyle = '#a0300c';
-      ctx.fillRect(Math.round(tip.x - camX), Math.round(tip.y - camY) + 1, 1, 1);
+    }
+    // elde taşınan cevher karanlıkta da seçilsin: küçük parıltı
+    const pl = this.player;
+    if (pl.cargo.length && !pl.dead && pl.dir !== 'up') {
+      const off = { down: [0, -4], left: [-6, -6], right: [6, -6] }[pl.dir];
+      const cx = Math.round(pl.x - camX + off[0]), cy = Math.round(pl.y - camY + off[1]) - 4;
+      ctx.fillStyle = { gold: '#fff2a0', crystal: '#d4f6ff', ruby: '#ffb0bc' }[pl.cargo[0]];
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.t * 6);
+      ctx.fillRect(cx - 2, cy, 1, 1);
+      ctx.fillRect(cx + 2, cy - 1, 1, 1);
       ctx.globalAlpha = 1;
+    }
+    // yerde yanan meşalelerin alevi
+    for (const it of this.items) {
+      if (it.kind !== 'torch' || !it.lit || it.taken || !onScreen(it.x, it.y)) continue;
+      drawFlame(ctx, it.x + 5 - camX, it.y - 10 - camY, this.t, it.phase, it.flick * (1 - (it.low || 0) * 0.5), 0.8 * (1 - (it.low || 0) * 0.3));
     }
     // Yerdeki eşyalar karanlıkta hafifçe parlar
     for (const it of this.items) {
-      if (it.taken || !onScreen(it.x, it.y)) continue;
+      if (it.taken || !onScreen(it.x, it.y) || (it.kind === 'torch' && it.lit)) continue;
       const v = 0.35 + 0.3 * Math.sin(this.t * 2.3 + it.phase);
       const x = Math.round(it.x - camX), y = Math.round(it.y - camY);
       ctx.globalAlpha = v;
@@ -1551,12 +1686,17 @@ export class PlayScene {
       const t = this.toasts[i];
       const a = Math.min(1, t.t / 0.25, (t.dur - t.t) / 0.5);
       ctx.globalAlpha = Math.max(0, a);
-      const tw = textWidth(t.text);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(Math.floor(w / 2 - tw / 2) - 4, y - 2, tw + 8, 13);
-      drawText(ctx, t.text, Math.floor(w / 2), y, { color: '#e6d2a8', align: 'center' });
+      // dar ekranda satırlara böl
+      const lines = wrapText(t.text, w - 16);
+      for (let j = lines.length - 1; j >= 0; j--) {
+        const tw = textWidth(lines[j]);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(Math.floor(w / 2 - tw / 2) - 4, y - 2, tw + 8, 13);
+        drawText(ctx, lines[j], Math.floor(w / 2), y, { color: '#e6d2a8', align: 'center' });
+        y -= 12;
+      }
       ctx.globalAlpha = 1;
-      y -= 16;
+      y -= 4;
     }
   }
 
@@ -1568,8 +1708,8 @@ export class PlayScene {
     b.size = s;
     b.x = w - s - m;
     b.y = h - s - m;
-    // meşale butonu sprintin solunda, biraz küçük
-    const t = this.torchButton;
+    // Bırak butonu sprintin solunda, biraz küçük
+    const t = this.dropButton;
     t.size = Math.round(s * 0.85);
     t.x = b.x - t.size - Math.round(m * 0.8);
     t.y = h - t.size - m;
@@ -1878,12 +2018,12 @@ export class PlayScene {
     const fire = this.nearFire();
     const fx = this.survivalFx;
     if (fire) this.warmth += dt / WARM_FIRE_TIME;
-    else if (p.torchLit) this.warmth += dt / WARM_TORCH_TIME;
+    else if (p.torchLit || this.litTorchNear(p.x, p.y, 56)) this.warmth += dt / WARM_TORCH_TIME;
     else this.warmth -= (dt / COLD_TIME) * (this.lighting.darkAt(p.x, p.y) > 0.5 ? COLD_DARK_MULT : 1) * k;
     this.hunger = Math.max(0, Math.min(1, this.hunger));
     this.warmth = Math.max(0, Math.min(1, this.warmth));
     // ısınma parıltıları
-    if ((fire || p.torchLit) && this.warmth < 0.999) {
+    if ((fire || p.torchLit || this.litTorchNear(p.x, p.y, 56)) && this.warmth < 0.999) {
       fx.heat -= dt;
       if (fx.heat <= 0) {
         fx.heat = fire ? 0.12 : 0.35;
@@ -1944,6 +2084,7 @@ export class PlayScene {
     if (this.warmth < 0.25 && !p.dead) jx = Math.random() < 0.5 ? -1 : 1;
     if (this.eating) jy = Math.floor(this.eating.t * 8) % 2;
     if (this.bending) jy = this.bending.t < 0.45 ? 2 : 1; // eğilip alır
+    if (p.dynamite && !p.dead && p.dir === 'up') this.drawDynamite(sc, Math.round(p.x - camX), Math.round(p.y - camY) - 16 + jy, 0.5);
     if (cold <= 0.01) {
       p.draw(sc, camX - jx, camY - jy);
     } else {
@@ -1962,10 +2103,10 @@ export class PlayScene {
       tc.globalCompositeOperation = 'source-over';
       sc.drawImage(T, Math.round(ox - camX) + jx, Math.round(oy - camY) + jy);
     }
-    // sırttaki dinamit
-    if (p.dynamite && !p.dead) {
-      const bx = Math.round(p.x - camX) + (p.dir === 'left' ? 5 : p.dir === 'right' ? -5 : 0), by = Math.round(p.y - camY) - 18 + jy;
-      if (p.dir !== 'down') this.drawDynamite(sc, bx, by, 0.5);
+    // elde taşınan dinamit (önde, açıkça görünür)
+    if (p.dynamite && !p.dead && p.dir !== 'up') {
+      const bx = Math.round(p.x - camX) + (p.dir === 'left' ? -7 : p.dir === 'right' ? 7 : 5), by = Math.round(p.y - camY) - 11 + jy;
+      this.drawDynamite(sc, bx, by, 0.5);
     }
     // yerken elindeki yemek
     if (this.eating) {
@@ -2175,6 +2316,20 @@ function drawFoodBite(ctx, kind, x, y) {
   ctx.fillRect(x - 1, y - 1, 5, 4);
   ctx.fillStyle = col[0];
   ctx.fillRect(x, y, 3, 2);
+}
+
+/** Sönmüş meşaleden kalan kararmış çubuk. */
+function drawBurnt(ctx, x, y, a) {
+  x = Math.round(x);
+  y = Math.round(y);
+  ctx.globalAlpha = Math.max(0, a);
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = i > 8 ? '#0a0806' : '#2a1e16';
+    ctx.fillRect(x - 6 + i, y - Math.floor(i / 2), 1, 2);
+  }
+  ctx.fillStyle = '#3a2a22';
+  ctx.fillRect(x + 4, y - 7, 3, 3);
+  ctx.globalAlpha = 1;
 }
 
 /** Yerdeki eşya (ışıktan önce çizilir). */

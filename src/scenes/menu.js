@@ -18,9 +18,10 @@ const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => 
 const HOWTO = [
   ['tap', 'Bir yere dokun: madenci oraya yürür.'],
   ['pick', 'Cevhere dokun: madenci kazar.'],
-  ['cage', 'Cevheri asansöre taşı (aynı anda 1).'],
+  ['cage', 'Elinde tek şey taşırsın: cevheri asansöre götür.'],
+  ['drop', 'Kazmak için meşaleyi Bırak butonuyla yere bırak.'],
   ['lever', 'Şalterleri indir: asansöre güç gelir.'],
-  ['eye', 'Karanlıkta meşaleni söndür, saklan.'],
+  ['eye', 'Meşalesiz karanlıkta Gromm seni göremez.'],
   ['food', 'Ye ve meşale yanında ısın.'],
   ['run', "Gromm'dan kaç: sağ alttaki butonla koş."],
 ];
@@ -29,6 +30,7 @@ const HOWTO_ICONS = {
   pick: [['.####..', '#...##.', '...#.#.', '..#....', '.#.....', '#......', '.......'], '#b8b0a8'],
   cage: [['#######', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#######', '.#...#.', '.#...#.'], '#8dff9a'],
   lever: [['.....#.', '....#..', '...#...', '.#####.', '.#...#.', '.#####.', '.......'], '#ff9a8a'],
+  drop: [['..###..', '..###..', '#######', '.#####.', '..###..', '...#...', '#######'], '#ffb040'],
   eye: [['.......', '..###..', '.#...#.', '#..#..#', '.#...#.', '..###..', '.......'], '#ff3a2a'],
   food: [['..###..', '.#####.', '#######', '#.#.#.#', '.#####.', '.......', '.......'], '#e0a860'],
   run: [['....##.', '...###.', '..###..', '.######', '...###.', '..##...', '.##....'], '#ffd970'],

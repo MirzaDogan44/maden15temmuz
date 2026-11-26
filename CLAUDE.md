@@ -32,7 +32,7 @@
 | Şalter indir | Şaltere tıkla. |
 | Yemek ye | Yerdeki yemeğe (ekmek, et, konserve) tıkla. |
 | Meşale al | Yerdeki sönük meşaleye veya karanlık bölge girişindeki meşale standına tıkla. |
-| Meşaleyi söndür/yak | Sağ alttaki **meşale butonu** (sprintin solunda). |
+| Elindekini bırak | Sağ alttaki **Bırak butonu** (sprintin solunda). Eli boşken soluk ve basılamaz. |
 | Taş topla | Yerdeki taşa tıkla (en fazla 3). |
 | Taş at | Sağdaki **taş butonuna** bas, sonra hedef noktaya tıkla. |
 | Koş | Sağdaki **sprint butonu**. Mouse ile hem butonu basılı tutup hem başka yere tıklamak mümkün olmadığı için **aç/kapa** şeklinde çalışsın. |
@@ -42,7 +42,7 @@ Butonlar ekranın **sağ tarafında**, telefonda başparmakla rahat basılacak b
 ### Arayüz yerleşimi
 - **Sol üst:** küçük, yarı saydam, pixel art **minimap**. Sadece mağaranın yapısını (yollar), oyuncunun konumunu (yanıp sönen nokta) ve asansörü (belirgin simge) gösterir; karanlık bölgeler daha koyu. Cevherleri, Gromm'u ve şalterleri **göstermez**. Dokunmaları engellemez. Diğer arayüz öğeleri sol üstten uzak tutulur.
 - **Üst orta:** kompakt sayaçlar (asansördeki cevher, taşınan cevher, şalterler) — sadece simge ve sayı.
-- **Sağ üst:** ses ve duraklatma ("II") butonları. **Sağ alt:** sprint butonu ve solunda meşale butonu.
+- **Sağ üst:** ses ve duraklatma ("II") butonları. **Sağ alt:** sprint butonu ve solunda Bırak butonu.
 
 ---
 
@@ -57,11 +57,15 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 - Odalarda etrafında dönülebilen büyük **kaya adacıkları/sütunlar** olsun (Gromm'un önünü kesmek ve kaçmak için).
 - Oyuncu haritanın genel yapısını kısa sürede kavrayabilmeli: asansör salonu, karanlık bölge ve cevher odaları kolay ayırt edilsin (raylar, kristaller, uyarı tabelası gibi belirgin işaretler).
 
-### Taşıma
-- Madenci aynı anda **sadece 1 cevher** taşıyabilir. Taşıdığı cevher sırtında görünür.
-- Elinde cevher varken başka bir cevhere dokunursa kazmaz; ekranda kısa bir uyarı çıkar: "Önce bunu asansöre götür."
+### Tek el kuralı (elde taşıma)
+- Madencinin elinde aynı anda **sadece bir şey** olabilir: **meşale**, **cevher** ya da **dinamit** (finalde).
+- Elinde bir şey varken başka bir taşınabilir eşyaya (meşale, cevher, dinamit, dolu stand) dokunursa almaz; kısa bir uyarı çıkar ("Elin dolu, önce bırak.") ve **Bırak** butonu kısa süre parlar.
+- **Kazmak iki el ister:** elinde bir şey varken cevher kazamaz, aynı uyarı çıkar. Kazılan cevher eline geçer.
+- **Yemek elde taşınmaz:** dokununca anında yenir, el doluyken de yenebilir.
+- Elinde ne olduğu sprite'ta açıkça görünür: meşale alevi, göğüs hizasında tutulan cevher (renkli, hafif parıltılı), dinamit.
+- **Bırak butonu** elindekini ayaklarının dibine bırakır; yere bırakılan her şey sonra tekrar alınabilir. Cevher ve dinamit olduğu yerde kalır; meşale yanmaya devam eder (bkz. aşağıda).
 - Cevher taşırken **hafifçe yavaşlar (~%15)**. Her cevher için asansöre gidip gelmek gerekir; bu yolculuklar Gromm'la karşılaşma riskini oluşturur.
-- Değerler `src/config.js` içinde (MAX_CARRY, CARRY_SLOWDOWN).
+- Değerler `src/config.js` içinde (MAX_CARRY, CARRY_SLOWDOWN). Uygulama: `src/player.js` (`held`, `handFull`), `src/scenes/play.js` > Elde taşıma.
 
 ### Şalterler
 - Asansör elektriksizdir. Bölümdeki **tüm şalterler** indirilince çalışır (yük de tamamsa).
@@ -90,25 +94,25 @@ Her bölümde belirli sayıda cevheri asansöre yükle, şalterleri indirerek as
 ### Karanlık, meşale ve saklanma
 - **Genel karanlık:** Normal bölgeler karanlık ve tehlikeli hissettirir ama yol görülebilir. Lambaların ve meşalelerin arası karanlık, köşeler ve duvar dipleri daha da karanlık. Işık havuzları sıcak, titrek ve belirgin; ışıklı/karanlık sınırı dithering ile keskin.
 - **Karanlık bölgeler:** Haritada sınırları belli, meşalesiz zifiri karanlık alanlar. Girişleri belli olur: söndürülmüş lambalar, uyarı tabelası ve kararan bir geçiş. Girişte bir **meşale standı** vardır.
-- **Meşaleler (ışık + ısı):**
-  - Yerde **sönük meşaleler** vardır (bölüm başına 4-5, bölümün tohumuyla her denemede aynı yerlerde; `src/items.js`). Dokununca madenci alır ve yakar. Karanlıkta hafifçe parlarlar.
-  - Standlar da meşale verir. Elinde meşale varken **boş bir standa** dokunursa meşaleyi geri bırakır.
-  - Yanan meşale etrafını aydınlatır (karanlık bölgede görmenin tek yolu), ısıtır (yanarken sıcaklık düşmez, yavaşça artar).
-  - Yaklaşık **2 dakika** yanar (`TORCH_BURN_TIME`); son ~20 sn titreyip kararır. Madencinin başının üstünde küçük bir süre göstergesi vardır. Yeni meşale alınca süre yenilenir. Bitince söner ve elden gider.
-  - Madencinin elinde alev görünür, kıvılcım çıkar.
-- **Meşale butonu** (sprint butonunun solunda): elindeki meşaleyi söndürür/yakar. Sönükken süresi azalmaz ama ısıtmaz da.
-- **Saklanma:** Madenci karanlık bölgede ve meşalesi sönükken Gromm onu **göremez** (sadece neredeyse dibine gelirse fark eder). Kovalıyorsa karanlığa girdiği noktaya kadar gelir, 2-3 sn bakınır, vazgeçer. Sönükken madencinin çevresinde çok küçük, zar zor seçilen bir alan görünür.
+- **Meşale bir eşyadır** (envanter özelliği değil; söndürme/yakma butonu yok). Sadece yerde bulunur: yerdeki sönük meşalelere (bölüm başına 4-5, bölümün tohumuyla her denemede aynı yerlerde; `src/items.js`) ve karanlık bölge girişlerindeki standlara dokununca madenci gidip alır ve yakar. Karanlıkta hafifçe parlarlar.
+- Meşalenin iki işi var:
+  - **Işık:** etrafı aydınlatır; karanlık bölgede yolu görmenin tek yolu.
+  - **Isı:** yanan meşaleye yakın olan madenci ısınır (elinde de olsa, yanında yerde de dursa).
+- Her meşalenin kendi yanma süresi var (~**2 dk**, `TORCH_BURN_TIME`). Son ~20 sn titreyip kararır, sonra söner ve yok olur (kısa süre duman ve kararmış bir çubuk kalır). Kullanılmamış yerdeki meşalelerin süresi azalmaz. Elindeyken başının üstünde küçük bir süre göstergesi görünür.
+- **Yere bırakılan meşale yanmaya devam eder** (süresi azalır): etrafını aydınlatır ve ısıtır; madenci onu bir cevherin yanına bırakıp ışığında kazabilir. Görme özelliği varsa Gromm yerdeki meşalenin ışığını uzaktan fark edip oraya gider (yem olarak kullanılabilir; aynı meşaleye bir kez bakar).
+- **Saklanma:** Madenci karanlık bir bölgedeyse ve yakınında yanan bir meşale (elinde ya da yerde) yoksa Gromm onu **göremez** (sadece neredeyse dibine gelirse fark eder). Yani saklanmak için meşaleyi bırakıp karanlığa uzaklaşmak gerekir. Kovalıyorsa karanlığa girdiği noktaya kadar gelir, 2-3 sn bakınır, vazgeçer. Karanlıkta madencinin çevresinde zar zor seçilen çok küçük bir alan görünür.
 - Özellikler saklanmayı zorlaştırır: **duyma** varsa karanlıkta koşmak/kazmak Gromm'u çeker; **koklama** izi karanlıkta da takip eder; **hafıza** madenciyi en son gördüğü yerleri (ör. karanlık bir girişi) sonra tekrar kontrol eder.
+- **Tipik akış:** karanlık bölge girişinde meşale al → karanlıkta yolunu bul → cevherin yanında Bırak'a bas → meşale yerde yanarken kaz → cevheri al → asansöre taşı (meşale geride yanar, süresi varsa dönüp alınabilir). Karanlıkta meşaleyle bir cevhere yaklaşınca bir kez: "Kazmak için meşaleyi bırak."
 - Gromm karanlık bölgelere girebilir; orada sadece kırmızı gözleri, güm sesleri ve ekran sarsıntısıyla anlaşılır.
-- 1. bölümde bir karanlık bölgenin girişinde bir kez: "Karanlıkta meşaleni söndür. Gromm seni göremez."
+- 1. bölümde bir karanlık bölgenin girişinde bir kez: "Meşaleni bırak ve karanlığa saklan. Gromm seni göremez."
 
 ### Açlık ve soğuk (hafif bir baskı; asıl tehlike Gromm)
 - **Barlar:** Sol üstte, minimap'in hemen altında, aynı genişlikte iki küçük pixel art bar ve simgeleri. Açlık: ekmek simgesi, turuncu-kahverengi. Sıcaklık: alev/kar tanesi simgesi, ısındıkça turuncu, soğudukça buz mavisi. %25'in altında yavaşça yanıp söner. Dokunmayı engellemez.
 - **Açlık:** Dolu bardan sıfıra ~6 dk, koşarken biraz daha hızlı. Yerdeki yemeklere dokununca madenci gidip yer (ekmek +%35, et/konserve +%60), kısa yeme animasyonu ve sesi. Yemek yemek koklama özelliği için 15 sn güçlü iz bırakır. %15'in altında hafif yavaşlama ve ara sıra mide guruldaması. Sıfırsa bayılır (ölüm).
-- **Soğuk:** Sıfıra ~4 dk, karanlık bölgelerde biraz daha hızlı. Duvar meşalesi, lamba veya dolu stand yanında hızla ısınır (küçük sıcaklık parıltıları); elinde yanan meşale varken yavaşça ısınır.
+- **Soğuk:** Sıfıra ~4 dk, karanlık bölgelerde biraz daha hızlı. Duvar meşalesi, lamba veya dolu stand yanında hızla ısınır (küçük sıcaklık parıltıları); elinde ya da yanında yerde yanan bir meşale varken yavaşça ısınır.
   - %50 altı: sprite'a hafif mavi ton. %25 altı: belirgin mavi, sprite titrer, nefesten buhar, ekran kenarlarından buz kristalleri büyür, ara sıra diş takırtısı. %10 altı: neredeyse buz rengi, hareket yavaşlar, ekran kenarları buzla kaplanır. Isınınca hepsi yumuşakça geri gider.
   - Sıfırsa donar (ölüm).
-- **Yerdeki eşyalar** (`src/items.js`): bölüm başına 3-4 yemek (ekmek, et, konserve) ve 4-5 sönük meşale; bölümün tohumuyla her denemede aynı yerlerde, bir kısmı Gromm'un dolaştığı açık yerlerde. Karanlıkta hafifçe parlarlar. Cevher veya dinamit taşırken de alınabilir.
+- **Yerdeki eşyalar** (`src/items.js`): bölüm başına 3-4 yemek (ekmek, et, konserve) ve 4-5 sönük meşale; bölümün tohumuyla her denemede aynı yerlerde, bir kısmı Gromm'un dolaştığı açık yerlerde. Karanlıkta hafifçe parlarlar. Yemek el doluyken de yenir; meşale tek el kuralına uyar.
 - Değerler `src/config.js` içinde (HUNGER_*, COLD_*, WARM_*, FOOD). Test: `?survival=fast` barları 5 kat hızlı azaltır.
 
 ### Ölüm ve kayıt
@@ -151,7 +155,7 @@ Havuzda **4 özellik** var: duyma, görme, koklama, hafıza. Sıra her yeni oyun
 
 | Özellik | Etkisi |
 |---|---|
-| Görme | Görüş hattı varsa madenciyi ~8 tile'dan görür. Yanan meşaleyi daha uzaktan (~12 tile) fark eder. Karanlık bölgede meşalesi sönük madenciyi göremez. |
+| Görme | Görüş hattı varsa madenciyi ~8 tile'dan görür. Elinde yanan meşale olanı daha uzaktan (~12 tile) fark eder; yerde yanan meşalelerin ışığına da gider. Karanlıkta, yakınında yanan meşale olmayan madenciyi göremez. |
 | Duyma | Seslerin geldiği yere gider. Yarıçaplar: yürüme < kazma < koşu < dinamit kurma < şalter. |
 | Koklama | Madencinin bıraktığı görünmez izi takip eder. Yemek yedikten sonra 15 sn iz 2 kat güçlüdür. |
 | Hafıza | Madenciyi en son gördüğü birkaç yeri ve asansör çevresini düzenli kontrol eder. |
@@ -159,7 +163,7 @@ Havuzda **4 özellik** var: duyma, görme, koklama, hafıza. Sıra her yeni oyun
 Uygulama ayrıntıları (`src/gromm.js`, `src/abilities.js`):
 - Sıra oyun başında karıştırılır ve oyun boyunca sabittir; ölüp bölümü tekrar oynamak sırayı değiştirmez.
 - **Duyma:** Ses olaylarının yarıçapı içindeyse sesin geldiği yere gider (yürüme 70 < kazma 170 < koşu 280 < dinamit 420 < şalter 560 px; `NOISE` in `src/config.js`).
-- **Görme:** Görüş hattıyla 8 tile, yanan meşaleli madenciyi 12 tile. Saklanan (karanlıkta, meşalesi sönük) madenciyi görmez.
+- **Görme:** Görüş hattıyla 8 tile, elinde yanan meşale olan madenciyi 12 tile. Yerde yanan bir meşalenin ışığını 12 tile'dan (görüş hattıyla) fark edip oraya gider, her meşaleye bir kez. Saklanan (karanlıkta, yakınında yanan meşale yok) madenciyi görmez.
 - **Koklama:** İz ~25 sn kalır (güçlü izde 2 kat süre ve menzil). Bir kovalamayı bıraktıktan sonra birkaç saniye koku almaz. ~5 tile içindeki izin en taze noktasına gider (iz koklarken yavaş yürür).
 - **Hafıza:** Son 3 görülme yerini hatırlar. Kaybedince son görüldüğü yere, sonra asansörün çevresine bakar; dolaşırken ~35 sn'de bir sırayla asansörü ve bu yerleri kontrol eder.
 - Test için: `?abilities=duyma,gorme` (her bölümde bu özellikler), `?level=3` (3. bölümden başla).
@@ -224,7 +228,7 @@ Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış dön
 - Gromm'un dört özelliği de aktif. Cevher yok. Görev: haritaya dağılmış **dinamitleri** bulup işaretli **4 patlatma noktasına** kurmak.
   - Dinamit görselleri: `assets/madenci/minerman-adventure/items/dynamite.png` (yerde ve sırtta) ve `dynamite-pack.png` (kurulmuş paket); değiştirilmeden çizilir.
   - Patlatma noktası: duvarda çatlak, üstünde kırmızı X ve tahta destek. En az biri karanlık bölgede (karanlık bölgeler iki girişli).
-  - Madenci aynı anda 1 dinamit taşır (sırtında görünür). Dinamitler (patlatma noktası + 1 adet) bazen karanlık bölgelerde, bazen Gromm'un yolunda.
+  - Madenci dinamiti elinde taşır (tek el kuralı: aynı anda 1, elinde meşale varken alamaz; Bırak ile yere bırakılabilir). Dinamitler (patlatma noktası + 1 adet) bazen karanlık bölgelerde, bazen Gromm'un yolunda.
   - Dinamit kurmak ~3 sn sürer (animasyon ve ses) ve ses çıkarır (duyma yarıçapı: dinamit). Başka yere dokunmak kurmayı yarıda keser.
   - Üst ortada "Dinamit: 2/4" sayacı. Minimap patlatma noktalarını gösterir (kırmızı X, kurulunca yeşil), dinamitleri göstermez.
 - 4. dinamit kurulunca fitiller yanar, **60 sn** geri sayım başlar (üst ortada büyük sayı), asansörün kilidi açılır. Mağara sallanır, tavandan taşlar düşer, Gromm öfkeyle kükreyip kovalar: madencinin yerini bilir, biraz hızlanır (yine sprintin %90'ını geçmez).
@@ -308,7 +312,7 @@ Kurallar:
 1. Proje iskeleti: canvas, oyun döngüsü, ölçekleme, GitHub Pages yayını.
 2. Tile haritası ve 1. bölüm haritası.
 3. Tıkla-yürü ve A\* yol bulma.
-4. Karanlık, fener konisi ve meşaleler.
+4. Karanlık ve meşaleler (meşale bir eşya; tek el kuralı, Bırak butonu).
 5. Cevher kazma, taşıma ve yavaşlama. Asansör ve sayaç.
 6. Gromm: dolaşma, yakına gelince kovalama, yakalama.
 7. Gromm'un kazma hareketi (çatlaklar, çıkış uyarısı ve efekti).
@@ -325,5 +329,4 @@ Kurallar:
 ---
 
 ## Açık konular (sonra karar verilecek)
-- Meşalenin bir süre sonra sönmesi (yakıt) eklensin mi? (Şimdilik meşale sadece bir standa geri bırakılabiliyor; yere bırakma yok.)
 - Cevher türleri farklı olsun mu (ağır/değerli/gürültülü)?
