@@ -182,15 +182,18 @@ Haritalar (`src/levels.js`; hepsi en az 72x52, geniş tüneller ve kaçış dön
 - Bölüm bitince açılış ekranıyla sonraki bölüme geçilir; 5. bölümden sonra şimdilik "Final yakında" ekranı. Ölünce sadece o bölüm baştan başlar.
 - Test için `?level=3` ile istenen bölümden başlanabilir.
 
-### Bölüm geçiş ekranları
-Oyun başlayınca ve her bölümün başında: siyah ekran, ortada büyük pixel yazı (sığmazsa satırlara bölünür), üstte küçük harflerle bölüm numarası ("BÖLÜM 2"), altında küçük bir ipucu, arkada derin bir kükreme/gümbürtü. Yazı ~3 saniye kalır, dokununca geçilebilir; sonra bölüm yavaşça aydınlanarak başlar. Ölünce açılış ekranı gösterilmez, bölüm doğrudan baştan başlar (`src/scenes/intro.js`).
-
-- Bölüm 1: "GROMM HAREKET EDEBİLİR" / İpucu: "Cevherleri asansöre taşı. Yakalanma."
-- Sonraki bölümler, gelen özelliğe göre:
-  - Duyma: "Gromm artık seni DUYABİLİYOR." / İpucu: "Koşmak ve şalterler ses çıkarır."
-  - Görme: "Gromm artık ışığı GÖREBİLİYOR." / İpucu: "Meşaleler seni ele verir."
-  - Koklama: "Gromm artık seni KOKLAYABİLİYOR." / İpucu: "Yemek yemek iz bırakır."
-  - Hafıza: "Gromm seni HATIRLIYOR." / İpucu: "Aynı numara iki kere işlemez."
+### Bölüm açılış ekranları
+Her bölümün başında sade bir ekran (`src/scenes/intro.js`):
+- Tamamen siyah, her şey ortada. Üstte küçük gri "Bölüm N/6".
+- Ortada büyük beyaz pixel yazıyla Gromm'un kuralları; anahtar kelime kırmızı:
+  - Bölüm 1: "GROMM **HAREKET EDEBİLİR**"
+  - Duyma: "GROMM **DUYABİLİR**", Görme: "GROMM **GÖREBİLİR**", Koklama: "GROMM **KOKLAYABİLİR**", Hafıza: "GROMM **HATIRLAYABİLİR**"
+  - Bölüm 6: önceki kuralların altına "MAĞARAYI **PATLAT**"
+- Önceki bölümlerin kuralları alt alta ve soluk; yeni kural en altta, parlak, titreyerek belirir (kısa kükreme).
+- Her kuralın solunda kodla çizilmiş küçük, kırmızı gözlü bir Gromm kafası.
+- Altta gri "Devam etmek için dokun." Dokununca derin bir gümbürtüyle bölüm yavaşça aydınlanır.
+- Oyunun kendi pixel yazı tipi (`src/font.js`, Türkçe karakterli). Sığmazsa yazı küçülür.
+- Ölünce açılış ekranı gösterilmez, bölüm doğrudan baştan başlar.
 
 ---
 

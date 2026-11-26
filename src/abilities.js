@@ -11,15 +11,17 @@
 
 export const ABILITY_IDS = ['duyma', 'gorme', 'koklama', 'hafiza'];
 
-/** Bölüm açılış ekranı yazıları (CLAUDE.md > Bölüm geçiş ekranları). */
+/** Bölüm açılış ekranındaki kurallar: "GROMM [ANAHTAR]" (anahtar kırmızı). */
 export const ABILITY_INFO = {
-  duyma: { name: 'Duyma', title: 'Gromm artık seni DUYABİLİYOR.', hint: 'Koşmak ve şalterler ses çıkarır.' },
-  gorme: { name: 'Görme', title: 'Gromm artık ışığı GÖREBİLİYOR.', hint: 'Meşaleler seni ele verir.' },
-  koklama: { name: 'Koklama', title: 'Gromm artık seni KOKLAYABİLİYOR.', hint: 'Yemek yemek iz bırakır.' },
-  hafiza: { name: 'Hafıza', title: 'Gromm seni HATIRLIYOR.', hint: 'Aynı numara iki kere işlemez.' },
+  duyma: { name: 'Duyma', subject: 'GROMM', key: 'DUYABİLİR' },
+  gorme: { name: 'Görme', subject: 'GROMM', key: 'GÖREBİLİR' },
+  koklama: { name: 'Koklama', subject: 'GROMM', key: 'KOKLAYABİLİR' },
+  hafiza: { name: 'Hafıza', subject: 'GROMM', key: 'HATIRLAYABİLİR' },
 };
 
-export const FIRST_LEVEL_INTRO = { title: 'GROMM HAREKET EDEBİLİR', hint: 'Cevherleri asansöre taşı. Yakalanma.' };
+/** Her bölümde geçerli temel kural ve final kuralı. */
+export const BASE_RULE = { subject: 'GROMM', key: 'HAREKET EDEBİLİR' };
+export const FINAL_RULE = { subject: 'MAĞARAYI', key: 'PATLAT' };
 
 // Türkçe karakterli yazımları da kabul et
 const ALIASES = { görme: 'gorme', hafıza: 'hafiza', koku: 'koklama', ses: 'duyma' };
