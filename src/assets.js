@@ -89,6 +89,25 @@ export function collectImagePaths() {
   return [...paths];
 }
 
+/** Hikâye girişindeki gazete (oyun açılışında değil, açılınca yüklenir). */
+export const NEWSPAPER_SRC = 'assets/gazete.png';
+
+/** Oyunun kullandığı bütün görseller (çevrimdışı tek dosya sürümüne gömülür). */
+export function allAssetPaths() {
+  return [...collectImagePaths(), NEWSPAPER_SRC];
+}
+
+/**
+ * Bir dosya yolunun yüklenecek adresi. Çevrimdışı tek dosya sürümünde
+ * (gromm-offline.html) görseller window.GROMM_ASSETS içinde data URI olarak
+ * gömülüdür: yol -> data URI. Böylece file:// ile açılınca da canvas
+ * "kirlenmez" (getImageData çalışır). Normal sürümde yolun kendisi döner.
+ */
+export function assetUrl(path) {
+  const m = typeof window !== 'undefined' && window.GROMM_ASSETS;
+  return (m && m[path]) || path;
+}
+
 /** Yüklenen görseller: yol -> HTMLImageElement */
 export const images = new Map();
 
@@ -113,7 +132,7 @@ export function loadImages(paths, onProgress) {
             if (onProgress) onProgress(++done, paths.length);
             resolve();
           };
-          img.src = p;
+          img.src = assetUrl(p);
         }),
     ),
   );

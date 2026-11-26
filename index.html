@@ -37,7 +37,7 @@
       -ms-interpolation-mode: nearest-neighbor;
       cursor: crosshair;
     }
-    #old {
+    #old, #file {
       display: none;
       position: fixed;
       left: 0;
@@ -48,6 +48,14 @@
       font-family: monospace;
       font-size: 16px;
       text-align: center;
+      line-height: 1.5;
+    }
+    #old small {
+      color: #8a7e70;
+      word-break: break-all;
+    }
+    #file a {
+      color: #ffd970;
     }
     noscript {
       color: #ccc;
@@ -60,13 +68,20 @@
 <body>
   <canvas id="game"></canvas>
   <noscript>Bu oyun için JavaScript gerekli.</noscript>
-  <div id="old">Bu tarayıcı oyunu açmak için çok eski. Lütfen tarayıcını güncelle ya da başka bir tarayıcı dene.</div>
+  <div id="old">Bu tarayıcı oyunu açmak için çok eski. Lütfen tarayıcını güncelle ya da başka bir tarayıcı dene.<br><br><small id="ua"></small></div>
+  <div id="file">Oyunu dosyadan açtın. Bu sürüm sadece internet linkiyle çalışır. İnternetsiz oynamak için <b>gromm-offline.html</b> dosyasını kullan ya da şu linkten aç:<br><br><a href="https://mirzadogan44.github.io/maden15temmuz/">https://mirzadogan44.github.io/maden15temmuz/</a></div>
   <script>
     // Modern tarayıcılar kaynak kodu (src/) doğrudan modül olarak yükler.
     // Yeni sözdizimini (?. ?? ... catch{}) ya da modülleri tanımayan eski
     // tarayıcılar, ES2015'e çevrilmiş tek dosyalık sürümü (legacy/gromm.js) yükler.
     // Test için ?legacy eski sürümü zorlar.
     (function () {
+      // Dosyadan (file://) açıldıysa: modüller ve görseller bu şekilde çalışmaz.
+      // "Tarayıcı eski" demek yanlış olur; çevrimdışı sürümü göster.
+      if (location.protocol === 'file:') {
+        document.getElementById('file').style.display = 'block';
+        return;
+      }
       var modern = false;
       try {
         modern = 'noModule' in document.createElement('script') &&
@@ -83,10 +98,13 @@
         s.src = 'legacy/gromm.js';
       }
       document.body.appendChild(s);
-      // hiçbiri çalışmadıysa (çok eski tarayıcı) bir uyarı göster
+      // Eski sürüm de çalışmadıysa (gerçekten çok eski tarayıcı) uyarı ve tarayıcı bilgisi.
+      // Modern yolda bekleme süresini uzun tut: yavaş bağlantıda yanlış uyarı çıkmasın.
       setTimeout(function () {
-        if (!window.__grommStarted) document.getElementById('old').style.display = 'block';
-      }, 6000);
+        if (window.__grommStarted) return;
+        document.getElementById('ua').textContent = navigator.userAgent;
+        document.getElementById('old').style.display = 'block';
+      }, modern ? 20000 : 8000);
     })();
   </script>
 </body>

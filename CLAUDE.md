@@ -20,11 +20,16 @@
   ```
 - **Eski tarayıcılar** (eski iPhone/iPad Safari'leri, eski Android Chrome'ları dahil):
   - `index.html` küçük bir yükleyiciyle tarayıcıyı yoklar: modern sözdizimini (`?.`, `??`, `...`, `catch {}`) ve modülleri tanıyanlar `src/main.js`'i doğrudan modül olarak yükler; tanımayanlar ES2015'e çevrilmiş tek dosyalık **`legacy/gromm.js`**'i yükler. Hiçbiri çalışmazsa birkaç saniye sonra "tarayıcı çok eski" uyarısı çıkar.
-  - **`src/` değişince `tools/build-legacy.sh` çalıştır ve `legacy/gromm.js`'i de commit'le** (esbuild ile, Node gerekir). Yoksa eski tarayıcılar eski sürümü oynar.
+  - **Her güncellemeden sonra (`src/` veya `assets/` değişince) `tools/build.sh` çalıştır ve `legacy/gromm.js` ile `gromm-offline.html`'i de commit'le** (esbuild ile, Node gerekir). Yoksa eski tarayıcılar ve internetsiz sürüm eski oyunu oynar.
   - Test için `?legacy` eski sürümü zorlar.
   - Girdi Pointer Events ile; olmayan tarayıcılarda (iOS 12 ve öncesi) dokunma + fare olaylarına düşer (`onPointer`, `src/input.js`). Yeni bir dokunma dinleyicisi eklerken bunu kullan.
   - Eksik olabilecek API'ler için `src/compat.js` (ilk import) küçük tamamlayıcılar içerir; ses `webkitAudioContext`'e düşer, StereoPanner yoksa sesler ortadan çalar. Türkçe büyük harf yerel ayar verisine güvenmeden yapılır (i→İ).
   - CSS'te yeni özelliklerin (`inset`, `env()`, `max()`) yanında eski karşılığını da ver.
+- **Dosyadan açma ve internetsiz sürüm** (akıllı tahta, USB):
+  - `index.html` dosyadan (`file://`) açılınca çalışmaz (modüller ve görseller CORS/canvas kirlenmesi yüzünden). Bu durumda "tarayıcı eski" değil, şu mesaj çıkar: "Oyunu dosyadan açtın. Bu sürüm sadece internet linkiyle çalışır. İnternetsiz oynamak için gromm-offline.html dosyasını kullan ya da şu linkten aç: …". "Tarayıcı çok eski" mesajı sadece gerçekten çalışmayan tarayıcılarda çıkar ve `navigator.userAgent`'ı gösterir.
+  - **`gromm-offline.html`** (repo ana klasöründe; `tools/build-offline.mjs`): bütün kod (ES2015) ve oyunda kullanılan bütün görseller (gazete dahil) base64 data URI olarak gömülü tek dosya. Başka dosya ve internet gerekmez; data URI olduğu için canvas kirlenmez (`getImageData` çalışır).
+  - Görseller her zaman `assetUrl(yol)` (`src/assets.js`) üzerinden yüklenir: çevrimdışı sürümde `window.GROMM_ASSETS` (yol → data URI) haritasından gelir. Yeni bir görsel eklerken `collectImagePaths()`/`allAssetPaths()` listesine girdiğinden ve `assetUrl` ile yüklendiğinden emin ol.
+  - İndirme sayfası: `indir.html` (GitHub Pages'te aynı sitede olduğu için `download` linki dosyayı indirir).
 - Her özellikten sonra oyunu tarayıcıda açıp test et. Küçük ve anlamlı commit'ler at.
 
 ---

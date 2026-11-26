@@ -4,6 +4,15 @@
 
 **Oyna:** https://mirzadogan44.github.io/maden15temmuz/
 
+## Akıllı tahtada / internetsiz oynamak için
+
+**gromm-offline.html** dosyasını indirip çift tıkla. Bütün oyun ve görseller bu tek dosyanın içinde; internet ve başka dosya gerekmez (USB'ye kopyalayıp akıllı tahtada açabilirsin).
+
+- **İndir:** https://mirzadogan44.github.io/maden15temmuz/indir.html (butona bas, dosya iner)
+- Doğrudan dosya: https://github.com/mirzadogan44/maden15temmuz/raw/main/gromm-offline.html (tarayıcı yazı olarak açarsa sağ tık → "Farklı kaydet")
+
+`index.html`'i dosyadan çift tıklayarak açmak çalışmaz (tarayıcılar buna izin vermez); onun yerine `gromm-offline.html`'i kullan.
+
 Tasarım belgesi: [CLAUDE.md](CLAUDE.md) · Asset lisansları: [assets/LICENSES.md](assets/LICENSES.md)
 
 ## Yerelde çalıştırma
@@ -25,20 +34,22 @@ Sonra http://localhost:8000 adresini aç. Adres parametreleri:
 - `?survival=fast`: açlık ve sıcaklık barları 5 kat hızlı azalır
 - `?legacy`: eski tarayıcılar için derlenmiş sürümü (`legacy/gromm.js`) yükler
 
-## Eski tarayıcılar
+## Derleme (her güncellemeden sonra)
 
-Modern tarayıcılar `src/` kodunu doğrudan yükler. Eski tarayıcılar için kod ES2015'e çevrilip tek dosyaya paketlenir. `src/` değişince yeniden üret ve commit'le:
+Modern tarayıcılar `src/` kodunu doğrudan yükler. Eski tarayıcılar için kod ES2015'e çevrilip tek dosyaya paketlenir (`legacy/gromm.js`); internetsiz sürüm de (`gromm-offline.html`) aynı koddan, görseller gömülü olarak üretilir. `src/` veya `assets/` değişince ikisini yeniden üret ve commit'le (Node gerekir):
 
 ```bash
-./tools/build-legacy.sh
+./tools/build.sh
 ```
 
 ## Klasörler
 
 ```
 index.html
-legacy/         eski tarayıcılar için derlenmiş tek dosya (tools/build-legacy.sh)
-tools/          derleme betiği
+legacy/         eski tarayıcılar için derlenmiş tek dosya
+gromm-offline.html  internetsiz tek dosya sürümü (görseller gömülü)
+indir.html      internetsiz sürümü indirme sayfası
+tools/          derleme betikleri (build.sh)
 src/            oyun kodu
   main.js         oyun döngüsü, sahneler
   compat.js       eski tarayıcılar için küçük tamamlayıcılar

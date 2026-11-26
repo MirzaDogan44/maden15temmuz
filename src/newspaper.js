@@ -10,8 +10,9 @@
 // Görsel yoksa (henüz yüklenmediyse) kibar bir uyarı gösterilir.
 
 import { onPointer } from './input.js';
+import { NEWSPAPER_SRC, assetUrl } from './assets.js';
 
-export const NEWSPAPER_SRC = 'assets/gazete.png';
+export { NEWSPAPER_SRC };
 
 const ZOOM = 2;
 
@@ -170,7 +171,7 @@ export class NewspaperViewer {
     this.onClose = onClose;
     this.isOpen = true;
     document.body.appendChild(this.root);
-    if (!this.img.getAttribute('src')) this.img.src = NEWSPAPER_SRC;
+    if (!this.img.getAttribute('src')) this.img.src = assetUrl(NEWSPAPER_SRC);
     else this.fit();
     // açılış animasyonu
     requestAnimationFrame(() => {
